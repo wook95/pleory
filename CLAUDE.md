@@ -40,6 +40,8 @@ adb logcat -s PleosHello:I
 - AVD: `Pleos_Connect_API_34` (이미지 `system-images;android-34;pleos_car_emulator;arm64-v8a`, Pleos Connect v2.1.0,
   디바이스 `Pleos_Connect_v2_0`, 2560×1440, RAM 4GB, cold boot)
 - 실행: `emulator -avd Pleos_Connect_API_34` — 콜드 부팅 약 22초. 부팅 확인: `adb shell getprop sys.boot_completed` 가 `1`.
+- 앱 화면은 2560×1440 전체가 아니라 오른쪽 패널 **약 1682×1210** (x 853–2535, y 90–1300)에 뜬다. 왼쪽 차량 패널·하단 공조 바는 시스템 몫. 실측: logcat `HOME_SCREEN TaskViewContainer` 의 bounds.
+- 스크린샷은 `am start -W` 로 실행 완료를 기다린 뒤 찍는다 — 실행이 3초 넘게 걸려 고정 sleep 이면 빈 화면이 찍힌다.
 - SDK 업데이트 사이트(Mac arm64): `https://nexus-playground.pleos.ai/repository/raw-releases/connect-avd/2.x/crp-arm64-sys-img.xml`
   (`~/.android/repositories.cfg` 에 등록됨. Windows/Linux 는 `crp-sys-img.xml`)
 - 새 이미지 버전으로 바꿀 때는 기존 이미지를 먼저 지운다 (가이드 지시).
