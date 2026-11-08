@@ -18,6 +18,10 @@ interface SessionDao {
     suspend fun latestEnded(exclude: Long): Long?
     @Query("UPDATE session SET state = :state, endedAt = :endedAt WHERE id = :id")
     suspend fun close(id: Long, state: SessionState, endedAt: Long)
+
+    /** S2 지난 기록: [since] 이후에 시작해 끝난 세션, 최신순(F11). */
+    @Query("SELECT * FROM session WHERE profileId = :profileId AND startedAt >= :since AND endedAt IS NOT NULL ORDER BY startedAt DESC")
+    suspend fun endedSince(profileId: String, since: Long): List<Session>
 }
 
 @Dao
@@ -26,6 +30,8 @@ interface UtteranceDao {
     @Query("SELECT * FROM utterance WHERE sessionId = :sessionId ORDER BY at")
     suspend fun bySession(sessionId: Long): List<Utterance>
     @Query("SELECT * FROM utterance WHERE id = :id") suspend fun get(id: Long): Utterance?
+    @Query("SELECT * FROM utterance WHERE sessionId IN (:sessionIds) ORDER BY at")
+    suspend fun bySessions(sessionIds: List<Long>): List<Utterance>
     @Query("SELECT * FROM utterance WHERE llmStatus = 'PENDING' ORDER BY at") suspend fun pending(): List<Utterance>
     @Query("UPDATE utterance SET llmStatus = :status WHERE id = :id") suspend fun setStatus(id: Long, status: LlmStatus)
 }
@@ -35,6 +41,10 @@ abstract class ItemDao {
     @Insert abstract suspend fun insertAll(items: List<Item>)
     @Query("SELECT * FROM item WHERE utteranceId = :utteranceId ORDER BY `order`")
     abstract suspend fun byUtterance(utteranceId: Long): List<Item>
+
+    /** 지운 항목도 함께 읽는다 — "모두 지움"과 "정리 전"을 카드와 같은 규칙으로 가르려면 필요하다(거르기는 [ai.pleos.hello.core.History]). */
+    @Query("SELECT * FROM item WHERE utteranceId IN (:utteranceIds) ORDER BY `order`")
+    abstract suspend fun byUtterances(utteranceIds: List<Long>): List<Item>
     @Query("DELETE FROM item WHERE utteranceId = :utteranceId") abstract suspend fun deleteByUtterance(utteranceId: Long)
 
     /** 카드에서 항목 하나 지우기(F9). 행은 남기고 표시만 끈다 — 원문(Utterance.text)은 그대로다. */

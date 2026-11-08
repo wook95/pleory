@@ -144,5 +144,5 @@ object CardModelBuilder {
     }
 
     /** 1km 미만은 소수 한 자리(0.4km), 그 이상은 반올림 정수(23km). "0km 달려" 를 막는다. */
-    private fun km(v: Double) = if (v < 1.0) String.format(Locale.KOREA, "%.1f", v) else Math.round(v).toString()
+    internal fun km(v: Double) = if (v < 1.0) String.format(Locale.KOREA, "%.1f", v) else Math.round(v).toString()
 }

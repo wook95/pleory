@@ -3,6 +3,8 @@ package ai.pleos.hello.data
 import ai.pleos.hello.BuildConfig
 import ai.pleos.hello.core.CardModel
 import ai.pleos.hello.core.CardModelBuilder
+import ai.pleos.hello.core.History
+import ai.pleos.hello.core.HistoryRow
 import ai.pleos.hello.core.SessionEnd
 import ai.pleos.hello.core.StructuredItem
 import ai.pleos.hello.core.TrackSample
@@ -38,6 +40,9 @@ interface PleoryStore {
 
     /** 모든 Room 행(세션·발화·항목·궤적·장소)을 지운다. 동의 설정은 건드리지 않는다. */
     suspend fun deleteAll() {}
+
+    /** S2 지난 기록 행(최근 7일, 최신순). [todoOnly] 면 할 일이 남은 세션만. */
+    suspend fun history(profileId: String, nowMillis: Long, todoOnly: Boolean): List<HistoryRow> = emptyList()
 }
 
 class RoomPleoryStore(private val db: PleoryDb) : PleoryStore {
@@ -93,6 +98,14 @@ class RoomPleoryStore(private val db: PleoryDb) : PleoryStore {
     }
 
     override suspend fun latestEndedSession(exclude: Long) = db.sessions().latestEnded(exclude)
+
+    override suspend fun history(profileId: String, nowMillis: Long, todoOnly: Boolean): List<HistoryRow> {
+        val sessions = db.sessions().endedSince(profileId, History.windowStart(nowMillis))
+        if (sessions.isEmpty()) return emptyList()
+        val utterances = db.utterances().bySessions(sessions.map { it.id })
+        val items = if (utterances.isEmpty()) emptyList() else db.items().byUtterances(utterances.map { it.id })
+        return History.rows(sessions, utterances, items, nowMillis, todoOnly)
+    }
 
     override suspend fun deleteAll(): Unit = withContext(Dispatchers.IO) {
         db.clearAllTables()
