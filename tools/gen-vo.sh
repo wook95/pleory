@@ -26,9 +26,13 @@ OUT=video/public/vo; mkdir -p "$OUT"
 LINES=(
   "[sighs] 오늘 팀장 때문에... 진짜 힘들었다."
   "내일 거래처 서류 다시 보내야 해. [pause] [soft laugh] 아, 노을 예쁘다."
+  "음... [pause] 그 뭐냐..."
+  "플레오리, [pause] 오늘 오후 세 시 회의 자료 챙기라고 적어줘."
 )
+# 이미 있는 파일은 다시 만들지 않는다(크레딧 절약). 다시 만들려면 지우고 돌린다.
 for i in "${!LINES[@]}"; do
   n=$((i+1))
+  [ -s "$OUT/driver-$n.mp3" ] && { echo "driver-$n.mp3 있음, 건너뜀"; continue; }
   body=$(python3 -c 'import json,sys;print(json.dumps({"text":sys.argv[1],"model_id":"eleven_v3","language_code":"ko","voice_settings":{"stability":0.5}}))' "${LINES[$i]}")
   curl -sf -X POST "$API/v1/text-to-speech/$VOICE?output_format=mp3_44100_128" \
     -H "xi-api-key: $KEY" -H 'Content-Type: application/json' -d "$body" -o "$OUT/driver-$n.mp3" \
