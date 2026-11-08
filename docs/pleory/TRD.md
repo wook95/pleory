@@ -118,6 +118,7 @@ PRD §1의 "빠뜨리기 쉬운 전이"를 모두 테스트로 만든다.
 <uses-permission android:name="android.permission.RECORD_AUDIO" />           <!-- 런타임, 정차 중 -->
 <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />   <!-- 런타임, coarse와 함께 요청 -->
 <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+<uses-permission android:name="pleos.car.permission.FUSED_LOCATION" />          <!-- dangerous: 런타임 요청(위치 권한과 함께) -->
 <uses-permission android:name="pleos.car.permission.CAR_DRIVE" />
 <uses-permission android:name="pleos.car.permission.CAR_INFO" />
 <uses-permission android:name="pleos.car.permission.NAVI_ROUTE" />

@@ -48,6 +48,8 @@ adb logcat -s PleosHello:I
 ## 권한
 
 - 차량 권한(예: `pleos.car.permission.CAR_DOORS`)은 매니페스트 선언만으로 설치 시 부여된다.
+  **예외: `pleos.car.permission.FUSED_LOCATION` 은 dangerous** — 런타임 요청 필요(없으면 `start()` 가 SecurityException).
+  에뮬레이터 수동 부여: `adb shell pm grant --user 10 ai.pleos.hello pleos.car.permission.FUSED_LOCATION` (+ ACCESS_FINE/COARSE_LOCATION).
   `adb shell pm grant` 는 예외를 내지만 `dumpsys package ai.pleos.hello` 에서 `granted=true` 면 정상이다.
 - 이름 체계: `pleos.car.permission.{CAR_X, CONTROL_CAR_X, PRIVATE_CAR_X}` — 조회는 `CAR_`, 제어(set)는 `CONTROL_CAR_`.
   X = CLIMATE, DOORS, DRIVE, ENERGY, INFO, LIGHTS, MIRRORS, SAFETY, SEATS, TOLL, WINDOWS.
