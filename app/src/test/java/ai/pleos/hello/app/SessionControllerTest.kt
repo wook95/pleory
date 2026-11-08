@@ -1,0 +1,190 @@
+package ai.pleos.hello.app
+
+import ai.pleos.hello.core.Clock
+import ai.pleos.hello.core.Gear
+import ai.pleos.hello.core.RuleStructurer
+import ai.pleos.hello.core.SessionEvent
+import ai.pleos.hello.core.StructuredItem
+import ai.pleos.hello.core.Structurer
+import ai.pleos.hello.core.StructurerResult
+import ai.pleos.hello.data.Emotion
+import ai.pleos.hello.data.ItemDao
+import ai.pleos.hello.data.ItemType
+import ai.pleos.hello.data.LlmStatus
+import ai.pleos.hello.data.PleoryStore
+import ai.pleos.hello.data.Segment
+import ai.pleos.hello.data.SessionState
+import ai.pleos.hello.data.Utterance
+import ai.pleos.hello.platform.SpeechInput
+import ai.pleos.hello.platform.SpeechInputListener
+import ai.pleos.hello.platform.SpeechOutput
+import kotlinx.coroutines.asCoroutineDispatcher
+import kotlinx.coroutines.delay
+import org.junit.After
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Test
+import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicInteger
+
+private const val TEXT = "내일 거래처 서류 다시 보내야 해, 아 노을 예쁘다"
+
+private class FakeStore : PleoryStore {
+    val utterances = java.util.concurrent.ConcurrentHashMap<Long, Utterance>()
+    val items = java.util.concurrent.ConcurrentHashMap<Long, List<StructuredItem>>()
+    val replaceCalls = AtomicInteger()
+    val closed = CopyOnWriteArrayList<Long>()
+    private val seq = AtomicInteger()
+
+    override suspend fun createSession(profileId: String, segment: Segment, startedAt: Long) = 1L
+    override suspend fun setSessionState(sessionId: Long, state: SessionState) = Unit
+    override suspend fun closeSession(sessionId: Long, endedAt: Long) { closed += sessionId }
+    override suspend fun saveUtterance(utterance: Utterance): Long {
+        val id = seq.incrementAndGet().toLong()
+        utterances[id] = utterance.copy(id = id)
+        return id
+    }
+    override suspend fun utterance(id: Long) = utterances[id]
+    override suspend fun pendingUtterances() = utterances.values.filter { it.llmStatus == LlmStatus.PENDING }
+    override suspend fun replaceItems(utteranceId: Long, items: List<StructuredItem>, status: LlmStatus) {
+        this.items[utteranceId] = items // 삭제 후 삽입과 같은 결과
+        utterances[utteranceId] = utterances.getValue(utteranceId).copy(llmStatus = status)
+        replaceCalls.incrementAndGet()
+    }
+    override suspend fun setLlmStatus(utteranceId: Long, status: LlmStatus) {
+        utterances[utteranceId] = utterances.getValue(utteranceId).copy(llmStatus = status)
+    }
+}
+
+private class FakeIn : SpeechInput {
+    override var listener: SpeechInputListener? = null
+    override fun start(round: Int) = Unit
+    override fun startFromPcm(bytes: ByteArray, round: Int) = Unit
+    override fun cancel() = Unit
+}
+
+private class FakeOut : SpeechOutput {
+    override var onDone: (() -> Unit)? = null
+    val said = CopyOnWriteArrayList<String>()
+    override fun say(text: String) { said += text }
+    override fun stop() = Unit
+}
+
+private object NoOutputs : SessionOutputs {
+    override fun showS0() = Unit
+    override fun showCard() = Unit
+    override fun startSummary() = Unit
+    override fun stopSummary() = Unit
+}
+
+private class FixedClock : Clock {
+    override fun nowMillis() = 1_000L
+}
+
+class SessionControllerTest {
+    private val executor = Executors.newSingleThreadExecutor()
+    private val store = FakeStore()
+    private val speechIn = FakeIn()
+    private val speechOut = FakeOut()
+
+    @After fun tearDown() = executor.shutdownNow().let { }
+
+    private fun controller(structurer: Structurer, timeoutMs: Long = 8_000) = SessionController(
+        store, structurer, speechIn, speechOut, NoOutputs, FixedContextProvider(), FixedClock(),
+        executor.asCoroutineDispatcher(), structureTimeoutMs = timeoutMs,
+    )
+
+    private fun speak(c: SessionController, text: String) {
+        c.post(SessionEvent.IgnitionOn)
+        c.post(SessionEvent.TalkTapped)
+        awaitUntil { speechIn.listener != null }
+        c.post(SessionEvent.SttFinal(text, 1))
+    }
+
+    private fun awaitUntil(timeoutMs: Long = 4_000, cond: () -> Boolean) {
+        val end = System.currentTimeMillis() + timeoutMs
+        while (!cond()) {
+            check(System.currentTimeMillis() < end) { "조건 대기 시간 초과" }
+            Thread.sleep(10)
+        }
+    }
+
+    @Test fun ruleStructurer_twoItems_todoNeutral_emotionUp() {
+        val c = controller(RuleStructurer())
+        speak(c, TEXT)
+        awaitUntil { store.replaceCalls.get() == 1 }
+        val items = store.items.getValue(1)
+        assertEquals(2, items.size)
+        assertEquals(ItemType.TODO to Emotion.NEUTRAL, items[0].type to items[0].emotion)
+        assertEquals(ItemType.EMOTION to Emotion.UP, items[1].type to items[1].emotion)
+        assertEquals(LlmStatus.DONE, store.utterances.getValue(1).llmStatus)
+        assertEquals(listOf("적어뒀어"), speechOut.said.toList())
+    }
+
+    @Test fun slowerThanTimeout_rawAndFailed_lateResponseIgnored() {
+        val slow = object : Structurer {
+            override suspend fun structure(text: String): StructurerResult {
+                delay(5_000)
+                return RuleStructurer().structure(text)
+            }
+        }
+        val c = controller(slow, timeoutMs = 100)
+        speak(c, TEXT)
+        awaitUntil { store.replaceCalls.get() == 1 }
+        val items = store.items.getValue(1)
+        assertEquals(1, items.size)
+        assertEquals(ItemType.RAW, items[0].type)
+        assertEquals(TEXT, items[0].text)
+        assertEquals(LlmStatus.FAILED, store.utterances.getValue(1).llmStatus)
+        // 늦게 도착한 성공(세대 1)은 버려진다
+        c.post(SessionEvent.LlmDone(1, 1))
+        Thread.sleep(200)
+        assertEquals(1, store.replaceCalls.get())
+        assertEquals(ItemType.RAW, store.items.getValue(1)[0].type)
+    }
+
+    @Test fun networkUnavailable_staysPending_noItems() {
+        val calls = AtomicInteger()
+        val offline = object : Structurer {
+            override suspend fun structure(text: String): StructurerResult {
+                calls.incrementAndGet()
+                return StructurerResult.NetworkUnavailable
+            }
+        }
+        val c = controller(offline)
+        speak(c, TEXT)
+        awaitUntil { calls.get() == 1 }
+        Thread.sleep(200)
+        assertEquals(LlmStatus.PENDING, store.utterances.getValue(1).llmStatus)
+        assertEquals(0, store.replaceCalls.get())
+    }
+
+    @Test fun reprocessTwice_itemCountStable() {
+        val c = controller(RuleStructurer())
+        speak(c, TEXT)
+        awaitUntil { store.replaceCalls.get() == 1 }
+        c.reprocess(1, TEXT)
+        awaitUntil { store.replaceCalls.get() == 2 }
+        c.reprocess(1, TEXT)
+        awaitUntil { store.replaceCalls.get() == 3 }
+        assertEquals(2, store.items.getValue(1).size)
+    }
+
+    @Test fun invalidJson_rawAndFailed() {
+        val bad = object : Structurer {
+            override suspend fun structure(text: String) = StructurerResult.Ok("```json {} ```")
+        }
+        val c = controller(bad)
+        speak(c, TEXT)
+        awaitUntil { store.replaceCalls.get() == 1 }
+        assertEquals(LlmStatus.FAILED, store.utterances.getValue(1).llmStatus)
+    }
+
+    @Test fun replaceItems_isAnnotatedTransaction() {
+        val bytes = ItemDao::class.java.getResourceAsStream("ItemDao.class")!!.readBytes()
+        val text = String(bytes, Charsets.ISO_8859_1)
+        assertTrue(text.contains("replaceItems"))
+        assertTrue("@Transaction 누락", text.contains("Landroidx/room/Transaction;"))
+    }
+}
