@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- PLACEHOLDER (E1 임시): 기획자가 실제 GPX 를 주기 전까지 쓰는 합성 경로. 회사(잠실)→올림픽대로(정체 ~12km/h)→한강대교→집(강서). 23km / 51분 / 정체 ~23분. 좌표는 실제 도로를 따르지 않는다. -->
+<!-- PLACEHOLDER (E1 임시): 기획자가 실제 GPX 를 주기 전까지 쓰는 합성 경로. 회사(잠실)→올림픽대로(정체 ~12km/h)→한강대교→집(강서). 23km / 51분 / 정체 ~23분. 끝점은 19:30:40 — 위치 전달 지연(실측 0.3~1.4초 = 30배속 앱 시각 최대 약 40초)이 있어도 19:31:00 가짜 기어 P 와 함께 19:31 에 도착 판정이 나도록 20초 당긴다. 좌표는 실제 도로를 따르지 않는다. -->
 <gpx version="1.1" creator="pleos-hello T6 placeholder" xmlns="http://www.topografix.com/GPX/1/1"><trk><name>demo-route-placeholder</name><trkseg>
 <trkpt lat="37.513300" lon="127.100000"><time>2026-11-08T18:40:00+09:00</time></trkpt>
 <trkpt lat="37.513714" lon="127.097212"><time>2026-11-08T18:40:30+09:00</time></trkpt>
@@ -103,5 +103,5 @@
 <trkpt lat="37.535795" lon="126.854842"><time>2026-11-08T19:29:30+09:00</time></trkpt>
 <trkpt lat="37.537196" lon="126.849895"><time>2026-11-08T19:30:00+09:00</time></trkpt>
 <trkpt lat="37.538598" lon="126.844947"><time>2026-11-08T19:30:30+09:00</time></trkpt>
-<trkpt lat="37.540000" lon="126.840000"><time>2026-11-08T19:31:00+09:00</time></trkpt>
+<trkpt lat="37.540000" lon="126.840000"><time>2026-11-08T19:30:40+09:00</time></trkpt>
 </trkseg></trk></gpx>

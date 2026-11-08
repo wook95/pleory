@@ -22,12 +22,12 @@ fi
 
 VOICE="${1:?voice_id 필요 (tools/gen-vo.sh voices)}"
 OUT=video/public/vo; mkdir -p "$OUT"
-# 단어는 DemoScenario.kt TEXTS 와 같게(대본 A안). 대괄호는 v3 오디오 태그.
+# 단어는 DemoScenario.kt LINES·run-demo.sh 의 Gleo 문구와 같게(video-script.md 대사 표). 대괄호는 v3 오디오 태그.
 LINES=(
   "[sighs] 오늘 팀장 때문에... 진짜 힘들었다."
   "내일 거래처 서류 다시 보내야 해. [pause] [soft laugh] 아, 노을 예쁘다."
   "음... [pause] 그 뭐냐..."
-  "플레오리, [pause] 오늘 오후 세 시 회의 자료 챙기라고 적어줘."
+  "플레오리 앱에서, [pause] 오늘 오후 세 시 회의 자료 챙기라고 적어줘."
 )
 # 이미 있는 파일은 다시 만들지 않는다(크레딧 절약). 다시 만들려면 지우고 돌린다.
 for i in "${!LINES[@]}"; do
