@@ -10,6 +10,14 @@
     <uses-permission android:name="pleos.car.permission.LLM_SERVICE" />
 
     <application>
+        <!-- tools/run-demo.sh v2 녹화 중 조작(무장·탭·시동 OFF). 화면을 가리지 않게 broadcast 로 받는다 -->
+        <receiver
+            android:name=".debugpanel.DemoReceiver"
+            android:exported="true" />
+        <provider
+            android:name=".debugpanel.DemoTracker"
+            android:authorities="${applicationId}.demotracker"
+            android:exported="false" />
         <activity
             android:name=".proto.ProtoActivity"
             android:exported="true"

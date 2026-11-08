@@ -17,6 +17,10 @@ class PcmInjectableSpeechInput(private val real: SpeechInput) : SpeechInput {
     @Volatile
     var pendingText: String? = null
 
+    /** [pendingText] 를 돌려주기까지 "듣고 있어요" 를 유지할 시간. 한 번 쓰면 기본값으로 돌아간다(데모가 대사 길이만큼 늘린다). */
+    @Volatile
+    var pendingTextDelayMs: Long = TEXT_DELAY_MS
+
     override var listener: SpeechInputListener?
         get() = real.listener
         set(value) { real.listener = value }
@@ -26,15 +30,17 @@ class PcmInjectableSpeechInput(private val real: SpeechInput) : SpeechInput {
         val text = pendingText
         pendingPcm = null
         pendingText = null
+        val delayMs = pendingTextDelayMs
+        pendingTextDelayMs = TEXT_DELAY_MS
         if (text != null) {
-            Handler(Looper.getMainLooper()).postDelayed({ listener?.onFinal(text, round) }, TEXT_DELAY_MS)
+            Handler(Looper.getMainLooper()).postDelayed({ listener?.onFinal(text, round) }, delayMs)
         } else if (pcm != null) real.startFromPcm(pcm, round) else real.start(round)
     }
 
     override fun startFromPcm(bytes: ByteArray, round: Int) = real.startFromPcm(bytes, round)
     override fun cancel() = real.cancel()
 
-    private companion object {
+    companion object {
         const val TEXT_DELAY_MS = 300L
     }
 }

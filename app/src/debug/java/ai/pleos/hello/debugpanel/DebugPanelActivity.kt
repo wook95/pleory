@@ -96,10 +96,10 @@ class DebugPanelActivity : Activity() {
     }
 
     /** Room 쿼리는 메인 스레드에서 못 돌리므로 IO 에서. */
-    private fun seedHistory(onDone: () -> Unit = {}) {
+    private fun seedHistory(set: String = "test", onDone: () -> Unit = {}) {
         val app = app
         CoroutineScope(Dispatchers.IO).launch {
-            runCatching { HistorySeed.seed(app) }.onFailure { Log.e(TAG, "history seed failed", it) }
+            runCatching { HistorySeed.seed(app, set) }.onFailure { Log.e(TAG, "history seed failed", it) }
             runOnUiThread(onDone)
         }
         log("history seed queued")
@@ -130,8 +130,8 @@ class DebugPanelActivity : Activity() {
             finish()
             return
         }
-        if (intent.getStringExtra("action") == "seed-history") { // adb 용: --es action seed-history
-            seedHistory { finish() } // 다 넣은 뒤 닫는다 — 먼저 닫으면 태스크와 함께 프로세스가 내려가 중간에 끊긴다
+        if (intent.getStringExtra("action") == "seed-history") { // adb 용: --es action seed-history [--es set film]
+            seedHistory(intent.getStringExtra("set") ?: "test") { finish() } // 다 넣은 뒤 닫는다 — 먼저 닫으면 태스크와 함께 프로세스가 내려가 중간에 끊긴다
             return
         }
         if (intent.getStringExtra("action") != "demo") return

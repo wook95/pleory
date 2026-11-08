@@ -13,6 +13,8 @@ import ai.pleos.hello.core.DestinationState as CoreDestination
 import ai.pleos.hello.core.GeoPoint
 import ai.pleos.hello.core.SessionEvent
 import ai.pleos.hello.core.SessionState
+import ai.pleos.hello.core.Structurer
+import ai.pleos.hello.core.StructurerResult
 import ai.pleos.hello.core.SystemClock
 import ai.pleos.hello.core.TrackMath
 import ai.pleos.hello.core.TrackSample
@@ -54,10 +56,10 @@ class AppClock : Clock {
 
     override fun nowMillis() = delegate.nowMillis()
 
-    /** [speed] 배속 DemoClock 을 오늘 18:40(로컬)에서 출발시킨다. null 이면 시스템 시계로 복귀. */
-    fun setDemo(speed: Double?) {
+    /** [speed] 배속 DemoClock 을 [baseMillis](기본: 오늘 18:40, 로컬)에서 출발시킨다. null 이면 시스템 시계로 복귀. */
+    fun setDemo(speed: Double?, baseMillis: Long = todayAt(18, 40)) {
         demoSpeed = speed
-        delegate = if (speed == null) SystemClock() else DemoClock(todayAt(18, 40), speed)
+        delegate = if (speed == null) SystemClock() else DemoClock(baseMillis, speed)
     }
 
     private fun todayAt(hour: Int, minute: Int) = Calendar.getInstance().apply {
@@ -130,7 +132,7 @@ class PleoryApp : Application() {
             // 공모전은 Claude(claude-haiku-5-5) → 실패하면 Gemini → 그래도 실패하면 RAW, 전부 컨트롤러 8초 안(TRD D6).
             // 플랫폼 LLM(Gleo AI)이 서드파티에 열리면 PleosLlmStructurer로 전환
             // 동의가 없거나 철회됐으면 외부 LLM 을 부르지 않고 RAW 로 남긴다(TRD §8-1 1번)
-            structurer = ConsentGatedStructurer({ consent.llmAllowed }, llmChain(), { Log.i(FLOW_TAG, it) }),
+            structurer = DemoSkippableStructurer(ConsentGatedStructurer({ consent.llmAllowed }, llmChain(), { Log.i(FLOW_TAG, it) })),
             speechIn = speechInput,
             speechOut = sdkHub.speechOutput,
             outputs = outputs,
@@ -156,6 +158,21 @@ class PleoryApp : Application() {
         warmLlm()
         controller.reprocessPending()
         startLocationIfPermitted()
+    }
+
+    /** 디버그 데모(video-script v2 한마디 3): true 면 다음 구조화 한 번을 부르지 않고 실패로 돌려 원문(RAW)으로 저장하게 한다. */
+    @Volatile
+    var skipNextLlm = false
+
+    private inner class DemoSkippableStructurer(private val next: Structurer) : Structurer {
+        override suspend fun structure(text: String): StructurerResult {
+            if (BuildConfig.DEBUG && skipNextLlm) {
+                skipNextLlm = false
+                Log.i(FLOW_TAG, "llm skipped: demo")
+                return StructurerResult.Error("demo skip")
+            }
+            return next.structure(text)
+        }
     }
 
     private val claude = ClaudeStructurer(timeoutMs = CLAUDE_BUDGET_MS)

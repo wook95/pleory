@@ -16,14 +16,38 @@ import java.util.Calendar
 /**
  * S2 지난 기록 확인용 지난 세션 6건(디버그 전용). 오늘·어제·2·4·6일 전은 7일 창 안, 7일 전 1건은 창 밖(보이면 안 된다).
  * 지운 항목 1개, 정리 전(원문) 한마디 1개, 한마디 없는 세션 1개를 섞는다. 같은 날 다시 넣으면 같은 시각의 세션을 지우고 새로 넣는다.
- * adb shell am start -n com.pplab.pleory/ai.pleos.hello.debugpanel.DebugPanelActivity --es action seed-history
+ * adb shell am start -n com.pplab.pleory/ai.pleos.hello.debugpanel.DebugPanelActivity --es action seed-history [--es set film]
+ *
+ * `film` 세트(video-script.md 파이프라인 요구사항 공통 5)는 영상용 5건이다: 경계 시험 행이 없고, 할 일은 모두 remindedAt 을 채워
+ * 1·2일차 도착 리마인드 후보에서 빠지며, 2일 전 외출의 할 일은 끝낸 것(done)이라 "할 일만" 에서 사라진다. "거래처" 는 넣지 않는다.
  */
 object HistorySeed {
     private class U(val minute: Int, val text: String, val items: List<Item>, val place: String? = null)
     private class S(val daysAgo: Int, val hour: Int, val minute: Int, val durationMin: Int, val km: Double, val segment: Segment, val utterances: List<U>)
 
-    private fun i(text: String, type: ItemType, emotion: Emotion = Emotion.NEUTRAL, deleted: Boolean = false) =
-        Item(utteranceId = 0, order = 0, text = text, type = type, emotion = emotion, deleted = deleted)
+    private fun i(text: String, type: ItemType, emotion: Emotion = Emotion.NEUTRAL, deleted: Boolean = false, done: Boolean = false) =
+        Item(utteranceId = 0, order = 0, text = text, type = type, emotion = emotion, deleted = deleted, done = done)
+
+    private val FILM = listOf(
+        S(0, 8, 10, 42, 18.6, Segment.COMMUTE_IN, listOf(
+            U(9, "아침에 커피 쏟았다 짜증나", listOf(i("아침에 커피를 쏟아서 짜증났다", ItemType.EMOTION, Emotion.DOWN)), "강변북로"),
+            U(27, "점심에 엄마한테 전화해야지", listOf(i("점심에 엄마한테 전화하기", ItemType.TODO)), "잠실대교"),
+        )),
+        S(1, 18, 35, 53, 22.8, Segment.COMMUTE_OUT, listOf(
+            U(12, "회의 잘 끝나서 후련하다", listOf(i("회의가 잘 끝나서 후련했다", ItemType.EMOTION, Emotion.UP)), "올림픽대로"),
+            U(31, "금요일까지 보고서 초안 보내야 해", listOf(i("금요일까지 보고서 초안 보내기", ItemType.TODO)), "한강대교"),
+        )),
+        S(2, 14, 0, 23, 6.2, Segment.OUTING, listOf(
+            U(5, "마트 가면 우유 사기", listOf(i("마트에서 우유 사기", ItemType.TODO, done = true)), "송파대로"),
+        )),
+        S(4, 18, 50, 51, 23.1, Segment.COMMUTE_OUT, listOf(
+            U(8, "오늘 진짜 길 막힌다", listOf(i("길이 많이 막혀서 답답했다", ItemType.EMOTION, Emotion.DOWN)), "올림픽대로"),
+            U(40, "노을 진짜 예쁘다", listOf(i("노을이 예뻤다", ItemType.EMOTION, Emotion.UP)), "한강대교"),
+        )),
+        S(6, 7, 55, 45, 19.4, Segment.COMMUTE_IN, listOf(
+            U(20, "오늘 발표 잘하자", listOf(i("오늘 발표 잘하자", ItemType.THOUGHT)), "강변북로"),
+        )),
+    )
 
     private val SEEDS = listOf(
         S(0, 8, 10, 42, 18.6, Segment.COMMUTE_IN, listOf(
@@ -57,15 +81,17 @@ object HistorySeed {
     private val FROM = 37.5133 to 127.1
     private val TO = 37.54 to 126.84
 
-    suspend fun seed(app: PleoryApp) {
+    suspend fun seed(app: PleoryApp, set: String = "test") {
+        val film = set == "film"
+        val seeds = if (film) FILM else SEEDS
         val db = app.db
         val profileId = app.profileId()
-        val starts = SEEDS.map { startOf(it) }
+        val starts = seeds.map { startOf(it) }
         db.query("SELECT id FROM session WHERE startedAt IN (${starts.joinToString(",")})", null).use { c ->
             val ids = buildList { while (c.moveToNext()) add(c.getLong(0)) }
             ids.forEach { db.sessions().delete(it) }
         }
-        SEEDS.zip(starts).forEach { (s, start) ->
+        seeds.zip(starts).forEach { (s, start) ->
             val end = start + s.durationMin * 60_000L
             val (oLabel, dLabel) = when (s.segment) {
                 Segment.COMMUTE_IN -> "집" to "회사"
@@ -93,10 +119,12 @@ object HistorySeed {
                         llmStatus = if (u.items.isEmpty()) LlmStatus.FAILED else LlmStatus.DONE,
                     ),
                 )
-                if (u.items.isNotEmpty()) db.items().insertAll(u.items.mapIndexed { k, it -> it.copy(utteranceId = uid, order = k) })
+                // 영상 세트의 할 일은 시드 시각에 이미 알린 것으로 둔다(도착 리마인드 후보에서 빠지게)
+                val remindedAt = if (film) end else null
+                if (u.items.isNotEmpty()) db.items().insertAll(u.items.mapIndexed { k, it -> it.copy(utteranceId = uid, order = k, remindedAt = if (it.type == ItemType.TODO) remindedAt else null) })
             }
         }
-        Log.i(DemoScenario.TAG, "history seeded ${SEEDS.size} sessions profile=$profileId")
+        Log.i(DemoScenario.TAG, "history seeded set=$set ${seeds.size} sessions profile=$profileId")
     }
 
     private fun startOf(s: S) = Calendar.getInstance().apply {
