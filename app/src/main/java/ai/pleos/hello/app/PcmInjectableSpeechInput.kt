@@ -40,7 +40,7 @@ class PcmInjectableSpeechInput(private val real: SpeechInput) : SpeechInput {
     override fun startFromPcm(bytes: ByteArray, round: Int) = real.startFromPcm(bytes, round)
     override fun cancel() = real.cancel()
 
-    companion object {
+    private companion object {
         const val TEXT_DELAY_MS = 300L
     }
 }
