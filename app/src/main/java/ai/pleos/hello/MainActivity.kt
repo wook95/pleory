@@ -89,6 +89,7 @@ class MainActivity : Activity() {
             // 카드는 주차·제한 없음일 때만 보이지만(ScreenGate), 탭과 기어 변경이 엇갈려도 주행 중에는 지우지 않는다
             onDeleteItem = { id -> if (app.gateAllowed()) app.controller.deleteItem(id) },
             onHistory = ::openHistory,
+            onReminderDone = { id -> if (app.gateAllowed()) app.controller.markReminderDone(id) },
         ).apply { visibility = View.GONE }
         historyView = S2HistoryView(
             this,
@@ -289,6 +290,8 @@ class MainActivity : Activity() {
                 requested -> app.controller.loadTodayCard()
                 else -> app.controller.loadCard()
             }
+            // 리마인드 띠(F15)는 도착 카드에만. Gleo 나 지난 기록으로 연 카드에는 붙이지 않는다
+            card.setReminders(if (requested || past != null) emptyList() else app.controller.loadReminders(), app.clock.nowMillis())
             if (m != null) card.setModel(m) else card.clearModel() // 전체 삭제 뒤에는 세션 행이 없다
         }
     }

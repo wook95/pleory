@@ -91,4 +91,6 @@ dependencies {
     debugImplementation("ai.pleos.playground:LLM:2.1.3.1")
 
     testImplementation("junit:junit:4.13.2")
+    // 마이그레이션·리마인드 조회 SQL 을 JVM 에서 실제 SQLite 로 돌린다(ReminderSqlTest)
+    testImplementation("org.xerial:sqlite-jdbc:3.41.2.2")
 }

@@ -1,5 +1,6 @@
 package ai.pleos.hello.data
 
+import ai.pleos.hello.core.ReminderCandidate
 import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
@@ -77,4 +78,26 @@ interface TrackPointDao {
 interface PlaceDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsert(place: Place)
     @Query("SELECT * FROM place WHERE profileId = :profileId") suspend fun byProfile(profileId: String): List<Place>
+}
+
+/** 도착 리마인드(F15). 대상 선정 규칙은 [ai.pleos.hello.core.ArrivalReminder] 가 갖고, 여기 조회는 후보를 좁히기만 한다. */
+@Dao
+interface ReminderDao {
+    @Query(CANDIDATES_SQL) suspend fun candidates(profileId: String, since: Long): List<ReminderCandidate>
+    @Query("UPDATE item SET remindedAt = :at WHERE id IN (:ids)") suspend fun markReminded(ids: List<Long>, at: Long)
+    @Query("UPDATE item SET done = 1 WHERE id = :id") suspend fun markDone(id: Long)
+
+    companion object {
+        /** 같은 프로필, [since] 이후에 말한, 끝내지도 지우지도 알리지도 않은 할 일. JVM 테스트(ReminderSqlTest)가 이 문장을 그대로 돌린다. */
+        const val CANDIDATES_SQL = """
+            SELECT item.id AS itemId, COALESCE(item.editedText, item.text) AS text, utterance.sessionId AS sessionId,
+                   session.segment AS segment, utterance.at AS spokenAt, item.type AS type, item.done AS done,
+                   item.deleted AS deleted, item.remindedAt AS remindedAt
+            FROM item
+            JOIN utterance ON item.utteranceId = utterance.id
+            JOIN session ON utterance.sessionId = session.id
+            WHERE session.profileId = :profileId AND utterance.at >= :since AND item.type = 'TODO'
+              AND item.done = 0 AND item.deleted = 0 AND item.remindedAt IS NULL
+            ORDER BY utterance.at DESC, item.id"""
+    }
 }

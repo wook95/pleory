@@ -5,6 +5,7 @@ import ai.pleos.hello.core.CardModel
 import ai.pleos.hello.core.CardModelBuilder
 import ai.pleos.hello.core.History
 import ai.pleos.hello.core.HistoryRow
+import ai.pleos.hello.core.ReminderCandidate
 import ai.pleos.hello.core.SessionEnd
 import ai.pleos.hello.core.StructuredItem
 import ai.pleos.hello.core.TrackSample
@@ -43,6 +44,13 @@ interface PleoryStore {
 
     /** S2 지난 기록 행(최근 7일, 최신순). [todoOnly] 면 할 일이 남은 세션만. */
     suspend fun history(profileId: String, nowMillis: Long, todoOnly: Boolean): List<HistoryRow> = emptyList()
+
+    /** 도착 리마인드 후보(F15): [profileId] 가 [since] 이후에 말한, 끝내지·지우지·알리지 않은 할 일. 최종 선정은 ArrivalReminder. */
+    suspend fun reminderCandidates(profileId: String, since: Long): List<ReminderCandidate> = emptyList()
+    suspend fun markReminded(itemIds: List<Long>, at: Long) {}
+
+    /** 리마인드 띠의 "했어". */
+    suspend fun markItemDone(itemId: Long) {}
 }
 
 class RoomPleoryStore(private val db: PleoryDb) : PleoryStore {
@@ -106,6 +114,9 @@ class RoomPleoryStore(private val db: PleoryDb) : PleoryStore {
         val items = if (utterances.isEmpty()) emptyList() else db.items().byUtterances(utterances.map { it.id })
         return History.rows(sessions, utterances, items, nowMillis, todoOnly)
     }
+    override suspend fun reminderCandidates(profileId: String, since: Long) = db.reminders().candidates(profileId, since)
+    override suspend fun markReminded(itemIds: List<Long>, at: Long) { if (itemIds.isNotEmpty()) db.reminders().markReminded(itemIds, at) }
+    override suspend fun markItemDone(itemId: Long) = db.reminders().markDone(itemId)
 
     override suspend fun deleteAll(): Unit = withContext(Dispatchers.IO) {
         db.clearAllTables()

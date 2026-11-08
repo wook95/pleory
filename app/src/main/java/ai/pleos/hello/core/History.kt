@@ -10,7 +10,7 @@ import java.util.TimeZone
 
 /**
  * S2 지난 기록의 세션 한 줄(F11). [moods] 는 감정 흐름 바(정리된 항목의 감정, 말한 순서), [itemCount] 는 그 세션 카드의 항목 수와 같다.
- * [todos] 는 지우지 않은 할 일 항목의 글 — "할 일만" 필터에서 행 아래에 붙는다.
+ * [todos] 는 지우지 않고 아직 안 한("했어" 전) 할 일 항목의 글 — "할 일만" 필터에서 행 아래에 붙는다.
  */
 data class HistoryRow(
     val sessionId: Long,
@@ -46,16 +46,17 @@ object History {
         val since = windowStart(nowMillis, tz)
         val bySession = utterances.groupBy { it.sessionId }
         val byUtterance = items.groupBy { it.utteranceId }
+        val doneIds = items.filter { it.done }.map { it.id }.toSet()
         return sessions
             .filter { it.endedAt != null && it.startedAt >= since }
             .filter { it.durationMin > 0 || bySession[it.id].orEmpty().isNotEmpty() }
             .sortedByDescending { it.startedAt }
-            .map { s -> row(s, CardModelBuilder.build(s, bySession[s.id].orEmpty().map { it to byUtterance[it.id].orEmpty() }, emptyList(), tz), nowMillis, tz) }
+            .map { s -> row(s, CardModelBuilder.build(s, bySession[s.id].orEmpty().map { it to byUtterance[it.id].orEmpty() }, emptyList(), tz), nowMillis, tz, doneIds) }
             .filter { !todoOnly || it.todos.isNotEmpty() }
     }
 
     /** 카드 모델 → 행. 날짜는 오늘·어제·그 외 "11월 5일 목요일". */
-    fun row(session: Session, card: CardModel, nowMillis: Long, tz: TimeZone = TimeZone.getDefault()): HistoryRow {
+    fun row(session: Session, card: CardModel, nowMillis: Long, tz: TimeZone = TimeZone.getDefault(), doneIds: Set<Long> = emptySet()): HistoryRow {
         val endedAt = session.endedAt ?: session.startedAt
         val today = startOfDay(nowMillis, tz)
         val day = when (startOfDay(session.startedAt, tz)) {
@@ -73,7 +74,7 @@ object History {
             stats = "${session.durationMin}분 · ${CardModelBuilder.km(session.distanceKm)}km",
             moods = card.items.filter { it.type != ItemType.RAW }.map { it.emotion },
             itemCount = card.items.size,
-            todos = card.items.filter { it.type == ItemType.TODO }.map { it.text },
+            todos = card.items.filter { it.type == ItemType.TODO && it.id !in doneIds }.map { it.text },
         )
     }
 

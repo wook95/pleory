@@ -110,6 +110,20 @@ class HistoryTest {
     }
 
     @Test
+    fun `했어 로 끝낸 할 일은 할 일만 필터에서 빠진다`() {
+        val t = today0 + 8 * 60 * min
+        val sessions = listOf(session(1, t), session(2, t + 60 * min))
+        val utterances = listOf(utt(10, 1, t + min), utt(20, 2, t + 61 * min))
+        val items = listOf(
+            item(100, 10, ItemType.TODO, text = "약 사기").copy(done = true),
+            item(200, 20, ItemType.TODO, text = "서류 보내기"),
+        )
+        val todo = History.rows(sessions, utterances, items, now, todoOnly = true, tz = tz)
+        assertEquals(listOf(2L), todo.map { it.sessionId })
+        assertEquals(listOf("서류 보내기"), todo.single().todos)
+    }
+
+    @Test
     fun `기록이 없으면 빈 목록`() {
         assertTrue(History.rows(emptyList(), emptyList(), emptyList(), now, tz = tz).isEmpty())
         assertTrue(History.rows(listOf(session(1, today0 + min)), emptyList(), emptyList(), now, todoOnly = true, tz = tz).isEmpty())

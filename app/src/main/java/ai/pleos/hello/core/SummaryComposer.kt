@@ -54,5 +54,6 @@ object SummaryComposer {
         return if (jong == 0 || jong == 8) "로" else "으로"
     }
 
-    private fun countWord(n: Int) = COUNT_WORDS.getOrNull(n) ?: n.toString()
+    /** 1~10 은 "하나".."열", 그 밖은 숫자. 도착 리마인드(ArrivalReminder)도 쓴다. */
+    internal fun countWord(n: Int) = COUNT_WORDS.getOrNull(n) ?: n.toString()
 }

@@ -1,11 +1,13 @@
 package ai.pleos.hello.ui
 
+import ai.pleos.hello.core.ArrivalReminder
 import ai.pleos.hello.core.CardFormat
 import ai.pleos.hello.core.CardItem
 import ai.pleos.hello.core.CardModel
 import ai.pleos.hello.core.CardUtterance
 import ai.pleos.hello.core.GeoPoint
 import ai.pleos.hello.core.LayoutMode
+import ai.pleos.hello.core.ReminderCandidate
 import ai.pleos.hello.core.TrackMath
 import ai.pleos.hello.data.ItemType
 import android.content.Context
@@ -39,7 +41,13 @@ class S1CardView(
     private val onSettings: () -> Unit = {},
     private val onDeleteItem: (Long) -> Unit = {},
     private val onHistory: () -> Unit = {},
+    private val onReminderDone: (Long) -> Unit = {},
 ) : LinearLayout(context) {
+
+    /** 도착 리마인드 띠(F15). 글 맨 위에 붙고, 비면 숨는다. [setReminders] 로 채운다. */
+    private val reminderStrip = context.col().apply { visibility = GONE }
+    private var reminders: List<ReminderCandidate> = emptyList()
+    private var remindersNow = 0L
 
     private val page = context.col()
     private val route = RouteView(context)
@@ -131,6 +139,7 @@ class S1CardView(
         if (m.items.none { it.id != null && it.id == confirmingId }) confirmingId = null
         val c = context
         page.removeAllViews()
+        page.addView(reminderStrip.detach())
         page.addView(c.txt(Tok.LABEL_M, Tok.SUB, tnum = true, s = m.date))
         page.addView(c.txt(Tok.HEAD_S, Tok.FG, 700, s = m.title), lp().m(t = c.dp(12)))
         page.addView(c.txt(Tok.BODY_L, Tok.SUB, tnum = true, s = m.sentence), lp().m(t = c.dp(16)))
@@ -184,6 +193,35 @@ class S1CardView(
         back.visibility = if (browsing) VISIBLE else GONE
         listOf(primary, qr, history, settings).forEach { it.visibility = if (browsing) GONE else VISIBLE }
         if (browsing) summaryBlock.visibility = GONE
+    }
+
+    /**
+     * 지난 주행에서 말하고 아직 안 한 할 일(F15). 항목마다 "했어"(88dp) — 누르면 띠에서 바로 빼고 [onReminderDone] 으로 끝낸 것으로 저장한다.
+     * [nowMillis] 는 "어제 퇴근길" 같은 상대 날짜를 셀 기준 시각.
+     */
+    fun setReminders(list: List<ReminderCandidate>, nowMillis: Long) {
+        reminders = list
+        remindersNow = nowMillis
+        val c = context
+        reminderStrip.removeAllViews()
+        reminderStrip.visibility = if (list.isEmpty()) GONE else VISIBLE
+        if (list.isEmpty()) return
+        reminderStrip.addView(c.txt(Tok.LABEL_M, Tok.SUB, s = "지난번에 말한 할 일"))
+        list.forEach { r ->
+            reminderStrip.addView(c.row().apply {
+                minimumHeight = c.dp(80)
+                addView(c.col().apply {
+                    addView(c.txt(Tok.BODY_M, Tok.FG, 500, s = r.text))
+                    val whenText = "${ArrivalReminder.relativeDay(r.spokenAt, nowMillis)} ${CardFormat.segmentName(r.segment)}"
+                    addView(c.txt(Tok.LABEL_S, Tok.SUB, s = whenText), lp().m(t = c.dp(6)))
+                }, lp(0, WRAP_CONTENT, 1f))
+                addView(c.button("했어", BtnKind.SECONDARY, padH = 28) {
+                    onReminderDone(r.itemId)
+                    setReminders(reminders.filter { it.itemId != r.itemId }, remindersNow)
+                }.apply { contentDescription = "‘${r.text}’ 했어" }, lp(WRAP_CONTENT).m(l = c.dp(16)))
+            }, lp().m(t = c.dp(12)))
+        }
+        reminderStrip.addView(c.rule(), lp(MATCH_PARENT, c.dp(1)).m(t = c.dp(24), b = c.dp(32)))
     }
 
     /** 요약 재생 중이면 자막과 "건너뛰기" 를 보이고, null 이면 숨긴다(PRD §4-2). 재생 중에는 주 버튼이 "다시 듣기" 다. */
