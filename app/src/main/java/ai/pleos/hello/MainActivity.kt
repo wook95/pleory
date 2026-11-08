@@ -122,8 +122,10 @@ class MainActivity : Activity() {
             consentRequested = false
         }
         val screen = ScreenGate.resolve(allowed, app.consent.needsPrompt || consentRequested, settingsOpen, state)
+        // 동의 화면이 카드를 가리는 동안에는 요약을 막고, 답한 뒤 카드가 보이면 한 번만 읽는다
+        app.controller.holdSummary(state == SessionState.CARD && screen == Screen.CONSENT)
         if (state != SessionState.CARD) summaryOwed = false
-        else if (screen == Screen.CONSENT) summaryOwed = true // 동의 화면이 카드를 가린 것뿐이라 요약을 끊지 않고 뒤에 다시 읽는다
+        else if (screen == Screen.CONSENT) summaryOwed = true
         else if (screen != Screen.CARD) app.controller.skipSummary() // 카드가 닫히면 요약 음성도 멈춘다
         view.visibility = if (screen == Screen.S0) View.VISIBLE else View.GONE
         card.visibility = if (screen == Screen.CARD) View.VISIBLE else View.GONE

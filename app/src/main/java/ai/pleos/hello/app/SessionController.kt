@@ -110,6 +110,7 @@ class SessionController(
     /** 요약을 재생 중이면 그 문장(자막), 아니면 null. 직렬 경로에서만 읽는다. */
     var summaryText: String? = null
         private set
+    private var summaryHeld = false
 
     /** 이벤트 처리 직후 현재 상태를 알린다(UI 갱신용). 직렬 경로에서 불린다. */
     var onStateChanged: ((SessionState) -> Unit)? = null
@@ -196,6 +197,17 @@ class SessionController(
         scope.launch {
             if (summaryText != null) {
                 trace("summary skipped")
+                endSummary(stopSpeech = true, notifyDone = true)
+            }
+        }
+    }
+
+    /** 동의 화면이 카드를 가리는 동안 요약을 막는다. 재생 중이거나 시작 대기 중이면 끝낸다. 풀린 뒤 재생은 화면이 [replaySummary] 로 한다. */
+    fun holdSummary(hold: Boolean) {
+        scope.launch {
+            summaryHeld = hold
+            if (hold && summaryJob != null) {
+                trace("summary held")
                 endSummary(stopSpeech = true, notifyDone = true)
             }
         }
@@ -380,6 +392,10 @@ class SessionController(
                 if (seq != summarySeq) return@launch
                 store.setSummaryText(sid, text)
                 if (seq != summarySeq) return@launch
+                if (summaryHeld) {
+                    endSummary(stopSpeech = false, notifyDone = true)
+                    return@launch
+                }
                 summaryText = text
                 summarySpeaking = true
                 if (BuildConfig.DEBUG) trace("summary speak: $text")
