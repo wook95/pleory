@@ -23,8 +23,6 @@ android {
         versionCode = 1
         versionName = "1.0"
 
-        buildConfigField("String", "PLEOS_CLIENT_ID", localProp("pleos.clientId"))
-        buildConfigField("String", "PLEOS_CLIENT_SECRET", localProp("pleos.clientSecret"))
         // 임시 LLM(Pleos LLM 400 해결 전까지). local.properties llm.geminiKey 가 없으면 셸의 GEMINI_API_KEY
         buildConfigField("String", "GEMINI_API_KEY", localProp("llm.geminiKey", "GEMINI_API_KEY"))
     }
@@ -41,6 +39,11 @@ android {
     }
 
     buildTypes {
+        debug {
+            // 스파이크 화면 전용. 릴리스 APK 에는 넣지 않는다
+            buildConfigField("String", "PLEOS_CLIENT_ID", localProp("pleos.clientId"))
+            buildConfigField("String", "PLEOS_CLIENT_SECRET", localProp("pleos.clientSecret"))
+        }
         release {
             isMinifyEnabled = false
             signingConfig = signingConfigs.getByName(if (releaseStore != null) "release" else "debug")

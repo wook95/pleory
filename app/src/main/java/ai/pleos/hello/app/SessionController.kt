@@ -20,8 +20,11 @@ import ai.pleos.hello.data.Utterance
 import ai.pleos.hello.platform.SpeechInput
 import ai.pleos.hello.platform.SpeechInputListener
 import ai.pleos.hello.platform.SpeechOutput
+import ai.pleos.hello.BuildConfig
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
@@ -64,13 +67,17 @@ class SessionController(
     private val sttTimeoutMs: Long = 15_000,
     /** 디버그 로그 훅. 이벤트·명령을 한 줄씩 넘긴다(JVM 테스트에서 android.util.Log 를 피하려고 주입). */
     private val trace: (String) -> Unit = {},
+    /** 컨트롤러 코루틴의 처리되지 않은 예외 로그 훅(앱이 죽지 않게 삼키고 남긴다). */
+    private val logError: (String, Throwable) -> Unit = { _, _ -> },
 ) {
     private class Entry(val text: String, val dbId: CompletableDeferred<Long>) {
         var generation = 0
         var items: List<StructuredItem> = emptyList()
     }
 
-    private val scope = CoroutineScope(SupervisorJob() + dispatcher)
+    private val scope = CoroutineScope(
+        SupervisorJob() + dispatcher + CoroutineExceptionHandler { _, t -> logError("controller coroutine failed", t) },
+    )
     private val machine = SessionStateMachine()
     private val entries = mutableMapOf<Long, Entry>()
     private var sessionId = CompletableDeferred<Long>()
@@ -107,7 +114,7 @@ class SessionController(
     /** 어느 스레드에서든 호출 가능. 직렬 경로로 넘긴다. */
     fun post(event: SessionEvent) {
         scope.launch {
-            trace("event $event")
+            trace("event ${redact(event)}")
             // 끝난 회차의 STT 상한 타이머가 남아 있지 않게 한다(다른 회차의 타이머는 건드리지 않는다).
             val endedRound = when (event) {
                 is SessionEvent.SttFinal -> event.round
@@ -157,16 +164,12 @@ class SessionController(
         return store.loadCard(sessionId.await())
     }
 
-    fun shutdown() {
-        scope.coroutineContext[Job]?.cancel()
-    }
-
     private fun run(commands: List<SessionCommand>) {
         commands.forEach(::execute)
     }
 
     private fun execute(c: SessionCommand) {
-        trace("command $c")
+        trace("command ${redact(c)}")
         when (c) {
             SessionCommand.StopSpeech -> speechOut.stop()
             is SessionCommand.StartStt -> {
@@ -284,22 +287,30 @@ class SessionController(
         summaryJob?.cancel()
         val session = sessionId
         summaryJob = scope.launch {
-            val sid = session.await()
-            cardJob?.join()
-            val items = store.loadCard(sid)?.items.orEmpty().map { SummaryItem(it.type, it.emotion, it.keywords) }
-            val text = SummaryComposer.compose(items)
-            if (seq != summarySeq) return@launch
-            store.setSummaryText(sid, text)
-            if (seq != summarySeq) return@launch
-            summaryText = text
-            summarySpeaking = true
-            trace("summary speak: $text")
-            outputs.summaryStarted(text)
-            speechOut.say(text)
-            delay(SUMMARY_MAX_MS)
-            if (seq == summarySeq) {
-                trace("summary 15s hard stop")
-                endSummary(stopSpeech = true, notifyDone = true)
+            try {
+                val sid = session.await()
+                cardJob?.join()
+                val items = store.loadCard(sid)?.items.orEmpty().map { SummaryItem(it.type, it.emotion, it.keywords) }
+                val text = SummaryComposer.compose(items)
+                if (seq != summarySeq) return@launch
+                store.setSummaryText(sid, text)
+                if (seq != summarySeq) return@launch
+                summaryText = text
+                summarySpeaking = true
+                if (BuildConfig.DEBUG) trace("summary speak: $text")
+                outputs.summaryStarted(text)
+                speechOut.say(text)
+                delay(SUMMARY_MAX_MS)
+                if (seq == summarySeq) {
+                    trace("summary 15s hard stop")
+                    endSummary(stopSpeech = true, notifyDone = true)
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // 요약이 실패해도 상태 머신이 SummaryDone 을 기다리며 멈추지 않게 끝낸다
+                logError("summary playback failed", e)
+                if (seq == summarySeq) endSummary(stopSpeech = true, notifyDone = true)
             }
         }
     }
@@ -316,6 +327,9 @@ class SessionController(
         if (wasPlaying) outputs.summaryEnded()
         if (notifyDone) post(SessionEvent.SummaryDone)
     }
+
+    /** 릴리스 로그에는 발화·요약 본문이 남지 않게 이벤트·명령 이름만 남긴다. */
+    private fun redact(x: Any) = if (BuildConfig.DEBUG) x.toString() else x::class.simpleName ?: "?"
 
     private companion object {
         const val SUMMARY_MAX_MS = 15_000L

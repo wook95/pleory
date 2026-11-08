@@ -19,7 +19,7 @@ interface PleoryStore {
     suspend fun replaceItems(utteranceId: Long, items: List<StructuredItem>, status: LlmStatus)
     suspend fun setLlmStatus(utteranceId: Long, status: LlmStatus)
 
-    /** 카드 표시 시점의 종료값과 궤적을 Session 행에 쓰고 state 를 CARD 로 바꾼다(T8). */
+    /** 카드 표시 시점의 종료값과 궤적을 Session 행에 쓰고 state 를 CARD 로 바꾼다. */
     suspend fun finishSession(sessionId: Long, endedAt: Long, end: SessionEnd, track: List<TrackSample>) {}
     suspend fun setSummaryText(sessionId: Long, text: String) {}
 

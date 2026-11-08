@@ -22,6 +22,11 @@ class StructureContractTest {
         assertEquals(StructuredItem("노을이 예뻤다", ItemType.EMOTION, Emotion.UP, listOf("노을")), r.items[1])
     }
 
+    @Test fun dropsBlankKeywords() {
+        val r = StructureContract.parse("""{"items":[{"text":"x","type":"emotion","emotion":"up","keywords":["", " ","노을 "]}]}""")
+        assertEquals(listOf("노을"), (r as StructureResult.Ok).items[0].keywords)
+    }
+
     @Test fun allowsSurroundingWhitespace() =
         assertTrue(StructureContract.parse("\n  $prdSample \n") is StructureResult.Ok)
 

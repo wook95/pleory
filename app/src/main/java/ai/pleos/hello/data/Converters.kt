@@ -21,5 +21,5 @@ class Converters {
     fun fromKeywords(v: List<String>): String = v.joinToString("\t")
 
     @TypeConverter
-    fun toKeywords(v: String): List<String> = if (v.isEmpty()) emptyList() else v.split("\t")
+    fun toKeywords(v: String): List<String> = v.split("\t").filter { it.isNotEmpty() }
 }

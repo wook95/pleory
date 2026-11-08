@@ -54,6 +54,18 @@ class SummaryComposerTest {
     @Test fun downUpWithoutKeyword() =
         assertEquals("힘들게 시작해서 좋게 끝났어.", SummaryComposer.compose(listOf(emo(Emotion.DOWN), emo(Emotion.UP))))
 
+    @Test fun blankKeywordSkipped() =
+        assertEquals(
+            "힘들게 시작해서 노을로 끝났어.",
+            SummaryComposer.compose(listOf(emo(Emotion.DOWN), emo(Emotion.UP, "", "노을"))),
+        )
+
+    @Test fun allBlankKeywordsFallBack() =
+        assertEquals(
+            "힘들게 시작해서 좋게 끝났어.",
+            SummaryComposer.compose(listOf(emo(Emotion.DOWN), emo(Emotion.UP, "", " "))),
+        )
+
     @Test fun todoCountWords() {
         assertEquals("생각이 좀 있었네. 할 일 둘 있어.", SummaryComposer.compose(listOf(thought, todo, todo)))
         assertEquals("생각이 좀 있었네. 할 일 셋 있어.", SummaryComposer.compose(listOf(thought, todo, todo, todo)))

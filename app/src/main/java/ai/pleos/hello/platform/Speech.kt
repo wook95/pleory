@@ -40,26 +40,33 @@ interface SpeechOutput {
 class PleosSpeechInput(context: Context, private val post: Post) : SpeechInput {
     private val stt = SpeechToText(context, SttMode.ON_DEVICE)
     private var ready = false
-    private var round = 0
+    /** 진행 중인 STT 회차. 바인더 스레드 콜백이 읽으므로 volatile. cancel·종료 뒤에는 -1 이라 늦게 온 결과는 버린다. */
+    @Volatile
+    private var activeRound = -1
     private var pcmThread: Thread? = null
 
     override var listener: SpeechInputListener? = null
 
     private val sdkListener = object : ResultListener {
         override fun onUpdated(text: String, isFinal: Boolean) {
-            val r = round
+            val r = activeRound
+            if (r < 0) return
             post { if (isFinal) listener?.onFinal(text, r) else listener?.onPartial(text, r) }
         }
 
         override fun onUpdatedEpdData(a: Long, b: Long) = Unit
         override fun onStartedRecognition() = Unit
         override fun onEndedRecognition() {
-            val r = round
+            val r = activeRound
+            if (r < 0) return
+            activeRound = -1
             post { listener?.onEnded(r) }
         }
 
         override fun onError(errorType: SttError) {
-            val r = round
+            val r = activeRound
+            if (r < 0) return
+            activeRound = -1
             post { listener?.onError(errorType.toString(), r) }
         }
 
@@ -91,14 +98,14 @@ class PleosSpeechInput(context: Context, private val post: Post) : SpeechInput {
 
     override fun start(round: Int) {
         if (!notReady(round)) {
-            this.round = round
+            activeRound = round
             stt.request()
         }
     }
 
     override fun startFromPcm(bytes: ByteArray, round: Int) {
         if (notReady(round)) return
-        this.round = round
+        activeRound = round
         pcmThread?.interrupt()
         pcmThread = Thread {
             try {
@@ -113,6 +120,7 @@ class PleosSpeechInput(context: Context, private val post: Post) : SpeechInput {
     }
 
     override fun cancel() {
+        activeRound = -1
         pcmThread?.interrupt()
         pcmThread = null
         if (ready) runCatching { stt.stop() }

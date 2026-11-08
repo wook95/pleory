@@ -78,6 +78,12 @@ private object NoOutputs : SessionOutputs {
     override fun stopSummary() = Unit
 }
 
+private class FixedContextProvider : ContextProvider {
+    override fun profileId() = "local"
+    override fun segment() = Segment.OUTING
+    override fun snapshot() = ContextSnapshot()
+}
+
 private class FixedClock : Clock {
     override fun nowMillis() = 1_000L
 }

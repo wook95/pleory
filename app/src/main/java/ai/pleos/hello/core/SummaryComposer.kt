@@ -27,7 +27,7 @@ object SummaryComposer {
         val main = when {
             emotions.size >= 2 && emotions.first().emotion == Emotion.DOWN && emotions.last().emotion == Emotion.UP -> {
                 // 마지막 up 항목의 첫 키워드. 키워드가 없으면 "좋게"로 대체
-                val kw = emotions.last().keywords.firstOrNull()
+                val kw = emotions.last().keywords.firstOrNull { it.isNotBlank() }
                 if (kw != null) "힘들게 시작해서 ${kw}${roParticle(kw)} 끝났어." else "힘들게 시작해서 좋게 끝났어."
             }
             emotions.size >= 2 -> "감정이 " + emotions.joinToString(", ") { emotionPhrase(it.emotion) } + "."

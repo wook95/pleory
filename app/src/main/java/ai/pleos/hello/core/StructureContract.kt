@@ -45,7 +45,7 @@ object StructureContract {
                 ?: return fail("items[$i].type 미지의 값: ${o["type"]}")
             val emotion = Emotion.entries.firstOrNull { it.name.lowercase() == o["emotion"] }
                 ?: return fail("items[$i].emotion 미지의 값: ${o["emotion"]}")
-            val keywords = (o["keywords"] as? List<*>)?.filterIsInstance<String>().orEmpty()
+            val keywords = (o["keywords"] as? List<*>)?.filterIsInstance<String>()?.map { it.trim() }?.filter { it.isNotBlank() }.orEmpty()
             StructuredItem(text, type, emotion, keywords)
         }
         return StructureResult.Ok(items)

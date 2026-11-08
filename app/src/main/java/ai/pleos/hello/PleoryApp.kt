@@ -78,7 +78,7 @@ class PleoryApp : Application() {
         db = PleoryDb.get(this)
         sdkHub = SdkHub(this).also { it.start() }
         assemble()
-        appScope.launch { dbSelfCheck() }
+        if (BuildConfig.DEBUG) appScope.launch { dbSelfCheck() }
     }
 
     private fun assemble() {
@@ -94,6 +94,7 @@ class PleoryApp : Application() {
             clock = clock,
             dispatcher = sdkHub.handler.asCoroutineDispatcher(), // SdkHub 직렬 경로(메인 루퍼)와 같은 스레드
             trace = { Log.i(FLOW_TAG, it) },
+            logError = { msg, t -> Log.e(FLOW_TAG, msg, t) },
         )
         sdkHub.gear.addListener { g -> gearEvent(g) }
         sdkHub.gear.current { g -> if (g != null) gearEvent(g) }

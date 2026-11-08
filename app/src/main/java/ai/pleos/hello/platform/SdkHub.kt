@@ -52,8 +52,6 @@ class SdkHub(private val context: Context) {
 
     private var vehicle: Vehicle? = null
     private var car: Car? = null
-    var uxManager: CarUxRestrictionsManager? = null
-        private set
 
     /** 디버그 전용: 가짜 기어를 내보낸다. null 이면 실제 기어로 돌아간다. */
     fun setGearOverride(g: Gear?) {
@@ -86,7 +84,6 @@ class SdkHub(private val context: Context) {
             val c = Car.createCar(context)
             car = c
             val m = c.getCarManager(Car.CAR_UX_RESTRICTION_SERVICE) as CarUxRestrictionsManager
-            uxManager = m
             carUx.attach(m)
             _uxRestrictions.value = SdkState.READY
             Log.i(TAG, "car ux manager acquired: ${m.currentCarUxRestrictions}")
@@ -112,7 +109,6 @@ class SdkHub(private val context: Context) {
         runCatching { car?.disconnect() }
         vehicle = null
         car = null
-        uxManager = null
         _vehicle.value = SdkState.FAILED
         _uxRestrictions.value = SdkState.FAILED
         _navi.value = SdkState.FAILED
