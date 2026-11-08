@@ -211,3 +211,11 @@ FusedLocation 퍼미션명은 문서에서 확인해 추가한다. MainActivity�
 - 취소 직후 다시 탭하면 이전 회차의 늦은 Ended/Error가 새 회차로 붙을 수 있다(`platform/Speech.kt`).
 - `SdkHub.initLocation`이 FAILED 뒤 `release()` 없이 `initialize()`를 다시 부른다.
 - final 없이 Ended만 오는 경로(무음)는 15초 타이머로 풀린다. 테스트 1건을 추가할 것.
+
+### 8-3. Gleo AI 연동 (2026-11-08 조사)
+
+- **가능: Gleo Interface(App Schema + Intent).** `assets/schema.json`(invokeWord "플레오리", actionCalls 최대 3개, 예: `ADD_DRIVE_NOTE{note}`)과 action intent-filter를 두면 Gleo가 우리 기능을 호출한다. 파라미터는 extra `ACTION_PARAM`(JSON), 응답은 broadcast `ai.pleos.playground.intent.action.APP_ACTION_RESPONSE`, 7초 안에 회신. 에뮬레이터 Gleo(`ai.umos.ambientai`)가 사용자 앱의 schema.json을 스캔하는 것을 logcat으로 확인했다. 실제 호출에 Pleos 승인이 필요한지는 미확인. 문서: `/docs/pleos-only/app-integration-guide/guide/*`.
+- **F14 휠 PTT·호출어 직접 수신은 불가** — Gleo가 음성 비서 역할을 독점한다. 대신 "PTT → Gleo → 플레오리에 적어줘 …" 간접 연동으로 바꾼다.
+- **AmbientAi API(@PrivilegedApi)·Gleo LLM은 서드파티 비공개.** Gemini를 유지한다.
+- **오디오 포커스(실측):** Pleos TTS SDK는 `USAGE_MEDIA`로 재생하고 포커스를 요청하지 않는다. 재생 전에 `setAudioAttributes(USAGE_ASSISTANT, CONTENT_TYPE_SPEECH)` + `AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK`, LOSS_TRANSIENT면 stop, 끝나면 abandon(§8-1 3번).
+- Pleos 문의: schema 승인 없이 에뮬레이터 호출 가능 여부와 절차, invokeWord 한국어 규칙, ACTION_PARAM 형식, TTS SDK 권장 usage, AmbientAi·LLM 개방 계획.
