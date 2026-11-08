@@ -55,7 +55,6 @@ class MainActivity : Activity() {
     private var historyLoad: Job? = null
     private val uiScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var cardLoad: Job? = null
-    private var cardShown = false
 
     /** 지금 카드 자리에 보이는 것: 지난 기록에서 연 세션 id, 평소 카드면 [LIVE_CARD], 카드가 안 보이면 null. 바뀌면 다시 읽는다. */
     private var shownCard: Long? = null
@@ -71,13 +70,10 @@ class MainActivity : Activity() {
     /** Gleo SHOW_TODAY_CARD 로 연 카드. 도착 전이면 지금 세션, 닫힌 뒤면 마지막 세션의 카드다. 게이트가 닫히면 내린다. */
     private var cardRequested = false
 
-    /** 첫 주차에 동의 화면이 카드를 가려서 요약을 아직 못 들려줬다. 동의 답 뒤 카드가 뜨면 다시 읽는다. */
-    private var summaryOwed = false
-
     private val stateListener: (SessionState) -> Unit = { runOnUiThread { render(it) } }
 
     private val outputsUi = object : PleoryApp.AppOutputs.Ui {
-        override fun refreshCard() { runOnUiThread { if (cardShown) loadCard() } }
+        override fun refreshCard() { runOnUiThread { if (shownCard != null) loadCard() } }
         override fun summaryStarted(text: String) { runOnUiThread { card.setSummary(text) } }
         override fun summaryEnded() { runOnUiThread { card.setSummary(null) } }
     }
@@ -195,11 +191,8 @@ class MainActivity : Activity() {
             historySession = null
         }
         val screen = ScreenGate.resolve(allowed, app.consent.needsPrompt || consentRequested, settingsOpen, state, cardRequested, historyOpen)
-        // 동의 화면이 카드를 가리는 동안에는 요약을 막고, 답한 뒤 카드가 보이면 한 번만 읽는다
-        app.controller.holdSummary(state == SessionState.CARD && screen == Screen.CONSENT)
-        if (state != SessionState.CARD) summaryOwed = false
-        else if (screen == Screen.CONSENT) summaryOwed = true
-        else if (screen != Screen.CARD) app.controller.skipSummary() // 카드가 닫히면 요약 음성도 멈춘다
+        // 지금 세션 카드가 안 보이면(동의·설정·지난 기록) 요약을 막는다. 읽는 중이면 멈추고, 못 읽은 요약은 카드로 돌아오면 한 번 읽는다
+        app.controller.holdSummary(state == SessionState.CARD && screen != Screen.CARD)
         val browsing = if (screen == Screen.HISTORY) historySession else null
         val cardNow = browsing ?: if (screen == Screen.CARD) LIVE_CARD else null
         view.visibility = if (screen == Screen.S0) View.VISIBLE else View.GONE
@@ -217,16 +210,14 @@ class MainActivity : Activity() {
             // 지난 기록에서 연 카드는 요약을 자동으로 읽지 않는다(F11) — 요약은 지금 세션 것이다
             card.setBrowsing(if (browsing != null) ::closeHistoryCard else null)
             loadCard()
-            if (browsing == null && summaryOwed) { summaryOwed = false; app.controller.replaySummary() } // 재생 중이면 컨트롤러가 무시한다
         }
         shownCard = cardNow
-        cardShown = cardNow != null
     }
 
     /** S1 의 "폰에서 열기". 주차·제한 없음이고 카드 내용을 읽은 뒤에만 연다. */
     private fun openQr() {
         val m = cardModel
-        if (!app.gateAllowed() || m == null || !cardShown) return
+        if (!app.gateAllowed() || m == null || shownCard == null) return
         val p = QrPayload.build(m)
         Log.i(PleoryApp.FLOW_TAG, "qr open bytes=${p.bytes} items=${p.items} truncated=${p.truncated} dropped=${p.dropped}")
         qrView.setPayload(p)
@@ -333,6 +324,7 @@ class MainActivity : Activity() {
             card.setReminders(if (requested || past != null) emptyList() else app.controller.loadReminders(), app.clock.nowMillis())
             cardModel = m
             if (m != null) card.setModel(m) else card.clearModel() // 전체 삭제 뒤에는 세션 행이 없다
+            if (qrOpen && m != null) qrView.setPayload(QrPayload.build(m)) // 열린 QR 도 다시 읽은 내용으로
         }
     }
 

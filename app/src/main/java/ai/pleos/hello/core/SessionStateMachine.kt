@@ -58,6 +58,11 @@ class SessionStateMachine {
         private set
 
     private val trigger = CardTrigger()
+
+    /** 마지막 카드가 목적지 도착(내비 도착·목적지 근접)으로 떴는가. 목적지 없음 + P 5초 대체 판정이면 false. */
+    @Volatile
+    var cardByArrival = false
+        private set
     @Volatile
     private var ignitionOn = false
     private var roundCounter = 0
@@ -203,6 +208,7 @@ class SessionStateMachine {
     private fun evaluate(out: MutableList<SessionCommand>) {
         if (state != SessionState.SESSION_OPEN || !trigger.fired()) return
         state = SessionState.CARD
+        cardByArrival = trigger.firedByArrival()
         out += SessionCommand.ShowCard
         if (inFlight.isEmpty()) startSummary(out) else summaryWaiting = true
     }

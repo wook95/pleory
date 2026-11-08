@@ -46,6 +46,9 @@ class CardTrigger {
             (parkHeld5s && destination == DestinationState.None)
         )
 
+    /** [fired] 가 목적지 도착(내비 도착 또는 알려진 목적지 근접)으로 참인가. 대체 판정(P 5초)만으로는 false. */
+    fun firedByArrival(): Boolean = fired() && (arrived || (nearDestination && destination == DestinationState.Known))
+
     /** 새 세션 시작 시. 기어와 목적지는 현재 값을 유지하고 도착 플래그와 주행 여부를 비운다. */
     fun resetFlags() {
         clearFlags()
