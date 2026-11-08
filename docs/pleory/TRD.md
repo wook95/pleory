@@ -1,6 +1,6 @@
 # Pleory TRD — S1 end-to-end
 
-- 기준: `Pleory_기능명세_v2.md`(이하 PRD). PRD와 어긋나면 PRD가 기준이고, PRD와 접수양식이 어긋나면 접수양식(기획서)이 기준이다.
+- 기준: `Pleory_기능명세_v2.md`(이하 PRD). v4 반영분은 §8-6(LLM 계약 §4·요약 규칙은 v2와 같다). PRD와 어긋나면 PRD가 기준이고, PRD와 접수양식이 어긋나면 접수양식(기획서)이 기준이다.
 - 이 문서는 PRD를 **어떻게 만들지**만 다룬다. 기능·문구·숫자는 PRD를 참조한다.
 - 근거: 2026-11-08 SDK 스파이크(`app/src/debug/.../spike/SpikeActivity.kt`, 결과는 PRD §7과 CLAUDE.md).
 - v2(11/8): Codex 레인과 critic 레인의 검토를 반영했다. 반영하지 않은 지적과 사용자 결정이 필요한 항목은 §7.
@@ -241,3 +241,32 @@ FusedLocation 퍼미션명은 문서에서 확인해 추가한다. MainActivity�
 - 기어 리스너 등록은 성공했는데 이벤트 없이 onFailed만 오는 차량은 대체 판정이 켜지지 않는다.
 - Gleo 액션 두 개(원문/항목)를 하나로 합쳐 "항목별로" 없이도 items가 오는지 시험(§8-4 제안).
 - 슬롭 정리 미반영: `GearSource.supported` 읽는 곳 없음, `DEBUG_ACTIVE` 매직넘버, 상수 동어반복 테스트.
+
+### 8-6. v4 명세 반영 (2026-11-08)
+
+기준: `Pleory_기능명세_v4.md`, 문서 다이제스트 `devpackv2/pleos_docs/`. 명세와 문서가 다르면 문서, 문서와 우리 에뮬레이터 실측이 다르면 실측을 따른다.
+
+바꾼 것
+- **Room 암호화(§3, 보안 가이드).** SQLCipher `net.zetetic:sqlcipher-android:4.17.0` + `androidx.sqlite:sqlite:2.6.2`, Room 에 `SupportOpenHelperFactory`. 4.18.0 이상은 `androidx.sqlite` 2.7.0을 끌어오고 2.7.0은 compileSdk 36을 요구해서 4.17.0에 둔다. DB 비밀번호는 무작위 32바이트(hex)이고 Android Keystore AES-GCM 키로 감싸 SharedPreferences `db_key`에 둔다(`data/DbKey.kt`). 감싼 값이 없거나 풀 수 없으면 기존 DB를 지우고 새로 만든다(첫 실행 때 평문 개발 DB 정리). 실측: `pleory.db` 첫 16바이트가 `SQLite format 3`이 아니고, db·wal 어디에도 발화 텍스트·`CREATE TABLE` 평문이 없다.
+- **동의 화면(F12, §0-4).** 마이크(발화 텍스트 → Gemini)·위치(좌표 → 날씨·주소 조회, 지금은 fixture) 목적, Gleo 경로 메모를 Pleos 플랫폼이 처리한다는 고지, 앱 내 수집 목록, 암호화 저장을 넣고 고지 버전을 2로 올렸다(기존 동의자도 다시 묻는다). 동의 모델은 명세의 `Consent(mic, location, at)` 대신 **마이크·위치를 함께 묻는 명시적 동의 한 번**(상태+시각+버전)을 유지한다. 위치 좌표가 아직 밖으로 나가지 않아 둘을 나눌 실익이 없다. 날씨·주소 조회를 실제로 붙일 때 나눈다.
+- **Gleo `SHOW_TODAY_CARD`(§11).** schema 세 번째 액션(component=activity, 파라미터 없음). 실측(Gleo 4.2.0.15): activity 액션은 `startActivity`(action `ai.pleos.hello.SHOW_TODAY_CARD`, FLAG_ACTIVITY_NEW_TASK)로 온다. MainActivity(singleTop)가 패키지 접두·맨 이름 action을 받고, 화면 게이트가 열려(주차) 있으면 카드를 연다 — 도착 카드 상태거나 지금 세션에 한마디가 있으면 지금 세션, 빈 세션이면 마지막으로 끝난 세션. 주행 중이면 화면을 바꾸지 않고 `fail` "The card is available only while parked." Gleo가 각각 "오늘 카드를 화면에 보여드릴게요" / "주차 중일 때만 … 보여줄 수 있어요"로 답하는 것을 확인했다.
+- **Gleo 회신을 `setPackage("ai.umos.ambientai")`로 한정.** `APP_ACTION_RESPONSE`는 Gleo가 user 10에서 동적으로 등록한 receiver가 받는다(`dumpsys activity broadcasts`). ADD_DRIVE_NOTE·SHOW_TODAY_CARD 모두 한정 후에도 Gleo가 응답을 받는 것을 확인했다.
+- **문의·신고(F9·F12, 심사 가이드).** 설정에 연락처를 보여준다. 주소는 임시값 `pleory.team@example.com` — 제출 전 교체(README에 사람 작업으로 표시).
+- **요약 오디오 포커스(§1 예외).** 요약 중 LOSS_TRANSIENT면 멈추고 포커스 요청을 쥔 채 기다렸다가 GAIN에서 처음부터 다시 읽는다(SDK에 이어 읽기 없음). 재개 때 15초 상한도 다시 잰다. 손실이 15초를 넘으면 요약을 끝낸다. "적어뒀어"는 기존대로 일시 손실이면 생략. 실측: Gleo 호출로 `focus paused -2` → 약 5~14초 뒤 `regained, resume` → onDone. 이때 SDK가 `stop()`마다 onStop을 내는 것도 확인했다(§8-5 첫 항목의 가정과 맞다).
+- **TrackPoint 적재 간격(§3·§12).** 위치 콜백 주기는 SDK가 정하므로(문서 미기재) 앱이 거른다: 화면이 보이면 5초, 백그라운드면 30초(`TrackSampler`). 데모 GPX는 30초 간격이라 카드 값(51분·23km)은 그대로다.
+
+이미 맞았던 것
+- 본문 글자 18px 이상: 가장 작은 글자가 20sp(밀도 160이라 20px).
+- STT LISTENING 15초 상한에서 `stop()`, 다시 탭하면 취소.
+- `distractionOptimized`, 철회 시 외부 전송 즉시 중단, 2단계 전체 삭제.
+
+하지 않은 것
+- TTS 선행 묵음 150~200ms: TextToSpeech 3.3.1에 묵음·SSML API가 없다(`speak(text, isFinal)`뿐). 지연 재생으로 흉내 내는 건 stop·포커스 경합을 늘려서 넣지 않았다.
+- 철회 = 전체 삭제(F12 문구): 지금은 철회가 외부 전송만 멈추고 삭제는 설정의 "전체 삭제"(2단계 확인)로 따로 한다. 철회 한 번에 기록이 사라지는 게 맞는지 기획 확인이 필요하다.
+
+따르지 않은 것과 이유
+- **기어 API.** v4는 "Vehicle SDK 2.3.2에 기어 API 없음 → AAOS Car API"라고 쓰지만 우리 에뮬레이터에서는 `vehicle.getGear().registerGearSelection`·`getCurrentGearSelectionState`가 동작한다(TRD D4·§8-1 4번). 그대로 둔다. 기획 쪽에 이 차이를 알린다.
+- **Gleo `ADD_NOTE{content}` + `mode: "silent"` + 앱 TTS "적어뒀어".** 실측 검증된 `ADD_DRIVE_NOTE`/`ADD_DRIVE_NOTES`와 `mode=voice`를 유지한다. 우리 TTS가 포커스를 잡으면 Gleo가 응답을 거부했고(§8-4), Gleo는 action 이름에 패키지를 붙여 보낸다.
+- **패키지명 `com.pplab.pleory`.** 명세 schema 예시의 값이다. applicationId 변경은 사람 결정 대기라 `ai.pleos.hello`를 유지한다.
+- compileSdk(명세 스파이크 35), LLM 제공자(Gemini)는 바꾸지 않았다.
+
