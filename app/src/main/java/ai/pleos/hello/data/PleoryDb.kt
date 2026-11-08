@@ -5,6 +5,7 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
+import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
 
 @Database(
     entities = [Session::class, Utterance::class, Item::class, TrackPoint::class, Place::class],
@@ -22,9 +23,17 @@ abstract class PleoryDb : RoomDatabase() {
     companion object {
         @Volatile private var instance: PleoryDb? = null
 
+        private const val NAME = "pleory.db"
+
+        /** SQLCipher 로 암호화해 연다. 비밀번호는 Keystore 로 감싸 둔다([DbKey]). */
         fun get(context: Context): PleoryDb = instance ?: synchronized(this) {
-            instance ?: Room.databaseBuilder(context.applicationContext, PleoryDb::class.java, "pleory.db")
-                .build().also { instance = it }
+            instance ?: run {
+                System.loadLibrary("sqlcipher")
+                val app = context.applicationContext
+                Room.databaseBuilder(app, PleoryDb::class.java, NAME)
+                    .openHelperFactory(SupportOpenHelperFactory(DbKey.passphrase(app, NAME)))
+                    .build().also { instance = it }
+            }
         }
     }
 }

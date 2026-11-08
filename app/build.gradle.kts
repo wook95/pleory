@@ -76,6 +76,11 @@ dependencies {
     implementation("androidx.room:room-ktx:2.8.4")
     ksp("androidx.room:room-compiler:2.8.4")
 
+    // Room 암호화(보안 가이드: 기기 저장 민감정보는 SQLite 포함 암호화). SupportOpenHelperFactory 로 Room 에 붙인다.
+    // 4.18.0 부터는 androidx.sqlite 2.7.0(compileSdk 36 요구)을 끌어온다 — compileSdk 34 를 유지하려고 4.17.0 + sqlite 2.6.2(Room 2.8.4 와 같음)
+    implementation("net.zetetic:sqlcipher-android:4.17.0")
+    implementation("androidx.sqlite:sqlite:2.6.2")
+
     // Gemini 스파이크 전용(debug). 플랫폼 LLM 이 열리면 재검토
     debugImplementation("ai.pleos.playground:LLM:2.1.3.1")
 
