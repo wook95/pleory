@@ -6,8 +6,8 @@ import {fileURLToPath} from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const files = [
-  'footage.mp4',
-  'vo/driver-1.mp3', 'vo/driver-2.mp3',
+  'footage.mp4', 'footage-d1.mp4', 'footage-d2.mp4',
+  'vo/driver-1.mp3', 'vo/driver-2.mp3', 'vo/driver-3.mp3', 'vo/driver-4.mp3',
   'bgm.mp3',
   'sfx/car-ambience.mp3', 'sfx/turn-signal.mp3', 'sfx/tap.mp3', 'sfx/gear-park.mp3',
 ];

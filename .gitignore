@@ -10,7 +10,7 @@ apk/
 # video/ (Remotion): 설치물·원본에서 만든 파일·외부 음원은 저장소에 넣지 않는다
 video/node_modules/
 video/out/
-video/public/footage.mp4
+video/public/footage*.mp4
 video/public/fonts/
 video/public/vo/
 video/public/sfx/

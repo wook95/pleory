@@ -13,7 +13,10 @@ let [take, take2] = process.argv.slice(2);
 take ??= join(root, '../apk/video/take2');
 if (!take2 && existsSync(join(take, 'day1/flow.log'))) [take, take2] = [join(take, 'day1'), join(take, 'day2')];
 const out = join(root, 'src/timings.json');
-const footage = join(root, 'public/footage.mp4');
+const v2 = take2 != null;
+// v2 는 하루에 footage 하나(scripts/prepare.sh ../apk/video/v2)
+const footage = join(root, v2 ? 'public/footage-d1.mp4' : 'public/footage.mp4');
+const footage2 = join(root, 'public/footage-d2.mp4');
 const SPEED = 30; // tools/run-demo.sh 기본 배속
 
 // 대본 기본값 (지난 1차 녹화: 적어뒀어 약 39초·61초, 요약 약 106~110초)
@@ -35,17 +38,17 @@ const toSec = (hms) => {
   return h * 3600 + m * 60 + s;
 };
 
-const probeDuration = () => {
-  if (!existsSync(footage)) return null;
-  const r = spawnSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', footage], {encoding: 'utf8'});
+const probeDuration = (file = footage) => {
+  if (!existsSync(file)) return null;
+  const r = spawnSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', file], {encoding: 'utf8'});
   const d = parseFloat(r.stdout);
   return Number.isFinite(d) ? d : null;
 };
 
 // 카드 전환(S0 -> S1)은 화면이 크게 바뀌는 첫 프레임이라 rec_start(최대 1초 오차)를 보정하는 기준으로 쓴다.
-const sceneChange = (from, to) => {
-  if (!existsSync(footage)) return null;
-  const r = spawnSync('ffmpeg', ['-hide_banner', '-ss', String(from), '-t', String(to - from), '-i', footage,
+const sceneChange = (from, to, file = footage) => {
+  if (!existsSync(file)) return null;
+  const r = spawnSync('ffmpeg', ['-hide_banner', '-ss', String(from), '-t', String(to - from), '-i', file,
     '-an', '-vf', "select='gt(scene,0.02)',showinfo", '-f', 'null', '-'], {encoding: 'utf8'});
   const m = /pts_time:([\d.]+)/.exec(r.stderr);
   return m ? from + parseFloat(m[1]) : null;
@@ -145,7 +148,6 @@ const shiftAll = (obj, shift) => {
 let t = {...defaults};
 const L1 = readEvents(take);
 if (L1) {
-  const v2 = take2 != null;
   const d1 = v2 ? parseDay1(L1) : null;
   const drive = d1 ?? parseDrive(L1);
   for (const k of Object.keys(defaults)) if (drive[k] != null) t[k] = drive[k];
@@ -169,7 +171,22 @@ if (L1) {
   if (d1) {
     t.d1 = d1;
     const L2 = readEvents(take2);
-    if (L2) t.d2 = parseDay2(L2); // 2일차 녹화는 아직 footage 로 바꾸지 않으므로 화면 보정 없이 로그 시각 그대로
+    if (L2) {
+      const d2 = parseDay2(L2);
+      // 2일차도 같은 방식: 로그의 showCard 와 footage-d2 의 S0 -> 카드 전환 프레임 차이로 녹화 시작 오차를 지운다.
+      const scene2 = d2.cardShown == null ? null : sceneChange(Math.max(0, d2.cardShown - 2), d2.cardShown + 1, footage2);
+      d2.syncShift = 0;
+      if (scene2 != null) {
+        const shift2 = Math.max(-1.2, Math.min(1.2, scene2 - d2.cardShown));
+        shiftAll(d2, shift2);
+        d2.syncShift = Number(shift2.toFixed(3));
+        console.log(`timings d2: 카드 전환 프레임 ${scene2.toFixed(2)}s, 보정 ${shift2.toFixed(2)}s`);
+      } else {
+        console.warn('timings d2: 카드 전환 프레임을 못 찾음 -> 보정 없음');
+      }
+      d2.footageDuration = probeDuration(footage2);
+      t.d2 = d2;
+    }
     else console.warn(`timings: ${take2} 의 flow.log·rec_start.txt 없음 -> d2 없음`);
   }
 } else {

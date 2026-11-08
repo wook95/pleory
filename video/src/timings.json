@@ -1,18 +1,93 @@
 {
-  "source": "flow.log (rec_start 22:28:02)",
+  "source": "flow.log (rec_start 23:43:14.883)",
   "clockSpeed": 30,
-  "clock0": 2.456,
-  "tap1": 36.456,
-  "ack1": 36.763,
-  "ack1Done": 38.601,
-  "tap2": 58.356,
-  "ack2": 58.663,
-  "ack2Done": 59.992,
-  "gearP": 104.098,
-  "cardShown": 104.1,
-  "summaryStart": 104.307,
-  "summaryEnd": 108.419,
-  "deleteTap": null,
-  "footageDuration": 112.509,
-  "syncShift": -0.673
+  "clock0": 6.006,
+  "tap1": 37.11,
+  "ack1": 40.715,
+  "ack1Done": 41.864,
+  "tap2": 54.452,
+  "ack2": 62.755,
+  "ack2Done": 63.939,
+  "gearP": 108.031,
+  "cardShown": 108.033,
+  "summaryStart": 108.111,
+  "summaryEnd": 111.952,
+  "deleteTap": 113.6,
+  "footageDuration": 131.567,
+  "syncShift": 0.001,
+  "d1": {
+    "clock0": 6.006,
+    "consentTap": 3.676,
+    "tap1": 37.11,
+    "ack1": 40.715,
+    "ack1Done": 41.864,
+    "tap2": 54.452,
+    "ack2": 62.755,
+    "ack2Done": 63.939,
+    "tap3": 85.051,
+    "ack3": 86.753,
+    "ack3Done": 87.883,
+    "gearP": 108.031,
+    "cardShown": 108.033,
+    "summaryStart": 108.111,
+    "summaryEnd": 111.952,
+    "deleteTap": 113.6,
+    "deleteConfirmTap": 115.172,
+    "qrTap": 117.973,
+    "qrOpen": 118.094,
+    "qrClose": 121.89,
+    "historyTap": 123.045,
+    "todoOnlyTap": 125.846,
+    "tapXY": {
+      "consent": {
+        "x": 2341,
+        "y": 1220
+      },
+      "delete": {
+        "x": 1730,
+        "y": 929
+      },
+      "delete-confirm": {
+        "x": 1593,
+        "y": 933
+      },
+      "qr": {
+        "x": 1313,
+        "y": 1216
+      },
+      "qr-close": {
+        "x": 1825,
+        "y": 785
+      },
+      "history": {
+        "x": 1583,
+        "y": 1216
+      },
+      "todo-only": {
+        "x": 2423,
+        "y": 166
+      }
+    }
+  },
+  "d2": {
+    "clock0": 1.438,
+    "gleoInject": 41.608,
+    "gleoAccepted": 43.149,
+    "gleoResponse": 43.15,
+    "gearP": 103.499,
+    "cardShown": 103.5,
+    "remindStart": 103.585,
+    "summaryEnd": 110.717,
+    "remindDoneTap": 112.31,
+    "gleoSimulated": false,
+    "tapXY": {
+      "remind-done": {
+        "x": 1716,
+        "y": 231
+      }
+    },
+    "source": "flow.log (rec_start 23:45:32.877)",
+    "syncShift": 0.045,
+    "footageDuration": 115.04
+  }
 }
