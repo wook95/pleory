@@ -57,4 +57,6 @@ dependencies {
 
     // Gemini 스파이크 전용(debug). 플랫폼 LLM 이 열리면 재검토
     debugImplementation("ai.pleos.playground:LLM:2.1.3.1")
+
+    testImplementation("junit:junit:4.13.2")
 }
