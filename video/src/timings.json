@@ -1,0 +1,18 @@
+{
+  "source": "flow.log (rec_start 22:28:02)",
+  "clockSpeed": 30,
+  "clock0": 2.456,
+  "tap1": 36.456,
+  "ack1": 36.763,
+  "ack1Done": 38.601,
+  "tap2": 58.356,
+  "ack2": 58.663,
+  "ack2Done": 59.992,
+  "gearP": 104.098,
+  "cardShown": 104.1,
+  "summaryStart": 104.307,
+  "summaryEnd": 108.419,
+  "deleteTap": null,
+  "footageDuration": 112.509,
+  "syncShift": -0.673
+}
