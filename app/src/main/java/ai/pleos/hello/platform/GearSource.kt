@@ -8,6 +8,11 @@ import android.util.Log
 enum class Gear { P, D, R, N, OTHER }
 
 interface GearSource {
+    /**
+     * 기어를 실제로 읽을 수 있는가. Vehicle SDK 의 Gear API 에는 check*Capabilities 가 없어서(javap 확인)
+     * 등록 예외나 첫 조회 실패로 판단한다. false 면 속도·UX 기반 대체 판정을 쓴다.
+     */
+    val supported: Boolean
     /** 현재 기어. 조회 실패면 null. */
     fun current(onResult: (Gear?) -> Unit)
     fun addListener(l: (Gear) -> Unit)
@@ -26,6 +31,9 @@ class PleosGearSource(private val post: Post) : GearSource {
     private val listeners = Listeners<(Gear) -> Unit>()
     private var vehicle: Vehicle? = null
 
+    override var supported: Boolean = true
+        private set
+
     private val sdkListener = object : GearSelectionListener {
         override fun onSelected(gear: VehicleGear?) {
             val g = gear.toGear()
@@ -39,7 +47,12 @@ class PleosGearSource(private val post: Post) : GearSource {
 
     fun attach(v: Vehicle) {
         vehicle = v
-        v.getGear().registerGearSelection(sdkListener)
+        try {
+            v.getGear().registerGearSelection(sdkListener)
+        } catch (e: Exception) {
+            supported = false
+            Log.w(TAG, "gear unsupported: register failed: $e")
+        }
     }
 
     fun detach() {
@@ -48,12 +61,12 @@ class PleosGearSource(private val post: Post) : GearSource {
     }
 
     override fun current(onResult: (Gear?) -> Unit) {
-        val v = vehicle ?: return post { onResult(null) }
+        val v = vehicle ?: return post { supported = false; Log.w(TAG, "gear unsupported: no vehicle"); onResult(null) }
         v.getGear().getCurrentGearSelectionState(
-            { g -> post { onResult(g.toGear()) } },
+            { g -> post { Log.i(TAG, "gear supported: current=$g"); onResult(g.toGear()) } },
             { e ->
                 Log.w(TAG, "gear current failed: $e")
-                post { onResult(null) }
+                post { supported = false; onResult(null) }
             },
         )
     }
@@ -66,6 +79,8 @@ class PleosGearSource(private val post: Post) : GearSource {
 class FakeableGearSource(private val real: GearSource) : GearSource {
     private val listeners = Listeners<(Gear) -> Unit>()
     private var fake: Gear? = null
+
+    override val supported: Boolean get() = real.supported
 
     init {
         real.addListener { g -> if (fake == null) emit(g) }

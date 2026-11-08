@@ -12,6 +12,7 @@ import ai.pleos.hello.core.SessionEvent
 import ai.pleos.hello.core.SessionState
 import ai.pleos.hello.core.SystemClock
 import ai.pleos.hello.core.TrackMath
+import ai.pleos.hello.core.TrackSample
 import ai.pleos.hello.data.PleoryDb
 import ai.pleos.hello.data.RoomPleoryStore
 import ai.pleos.hello.data.Segment
@@ -20,6 +21,7 @@ import ai.pleos.hello.platform.GeminiStructurer
 import ai.pleos.hello.platform.DestinationState
 import ai.pleos.hello.platform.Gear
 import ai.pleos.hello.platform.NaviListener
+import ai.pleos.hello.platform.ParkedFallback
 import ai.pleos.hello.platform.SdkHub
 import android.Manifest
 import android.app.Application
@@ -97,7 +99,7 @@ class PleoryApp : Application() {
             logError = { msg, t -> Log.e(FLOW_TAG, msg, t) },
         )
         sdkHub.gear.addListener { g -> gearEvent(g) }
-        sdkHub.gear.current { g -> if (g != null) gearEvent(g) }
+        sdkHub.gear.current { g -> if (g != null) gearEvent(g) else startGearFallback() }
         // 시동 = 앱 세션 시작(D11). 이전 PENDING 발화는 새 세션 뒤에 재처리한다.
         controller.post(SessionEvent.IgnitionOn)
         wireArrival()
@@ -114,6 +116,7 @@ class PleoryApp : Application() {
             override fun onDestination(state: DestinationState) {
                 Log.i(FLOW_TAG, "destination $state")
                 controller.post(SessionEvent.DestinationChanged(state.toCore()))
+                watchProximity(state)
             }
 
             override fun onArrived() {
@@ -122,6 +125,7 @@ class PleoryApp : Application() {
             }
         })
         controller.post(SessionEvent.DestinationChanged(sdkHub.navi.destination.toCore()))
+        watchProximity(sdkHub.navi.destination)
         sdkHub.location.addListener { fix ->
             if (controller.state == SessionState.CARD) return@addListener
             val dest = sdkHub.navi.destination as? DestinationState.Known ?: return@addListener
@@ -129,6 +133,37 @@ class PleoryApp : Application() {
                 controller.post(SessionEvent.LocationNearDest)
             }
         }
+    }
+
+    /** 알려진 목적지 반경 진입을 FusedLocation 근접 알림으로도 받는다(자체 거리 계산과 병행, 머신은 멱등). */
+    private fun watchProximity(state: DestinationState) {
+        if (state is DestinationState.Known) {
+            sdkHub.location.watchProximity(state.lat, state.lng, ARRIVAL_RADIUS_M.toFloat()) {
+                if (controller.state != SessionState.CARD) {
+                    Log.i(FLOW_TAG, "proximity enter")
+                    controller.post(SessionEvent.LocationNearDest)
+                }
+            }
+        } else {
+            sdkHub.location.clearProximity()
+        }
+    }
+
+    private var gearFallback: ParkedFallback? = null
+
+    /** 기어를 못 읽는 차량: 위치 속도와 UX 제한으로 P/D 를 만들어 같은 경로(gearEvent)로 보낸다. */
+    private fun startGearFallback() {
+        if (gearFallback != null) return
+        val f = ParkedFallback().also { gearFallback = it }
+        Log.w(FLOW_TAG, "gear unsupported: speed/UX fallback on")
+        var prev: TrackSample? = null
+        sdkHub.location.addListener { fix ->
+            val cur = TrackSample(fix.timeMillis, fix.lat, fix.lng)
+            prev?.let { p -> f.onSpeed(cur.atMillis, TrackMath.speedKmh(p, cur))?.let(::gearEvent) }
+            prev = cur
+        }
+        sdkHub.uxRestrictions.addListener { required -> f.onUx(required)?.let(::gearEvent) }
+        f.onUx(sdkHub.uxRestrictions.isDistractionOptimizationRequired)
     }
 
     private fun DestinationState.toCore(): CoreDestination = when (this) {
