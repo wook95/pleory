@@ -46,10 +46,23 @@ object ArrivalReminder {
         val sameSession = selected.all { it.sessionId == first.sessionId }
         val where = if (sameSession) "${relativeDay(first.spokenAt, nowMillis, tz)} ${segmentPhrase(first.segment)}" else "지난 주행에서"
         val count = SummaryComposer.countWord(selected.size)
-        val text = first.text.trim().let { if (it.length > MAX_ITEM_CHARS) it.take(MAX_ITEM_CHARS).trimEnd() + "…" else it }.trimEnd('.', '。')
+        val text = itemText(first.text).let { if (it.length > MAX_ITEM_CHARS) it.take(MAX_ITEM_CHARS).trimEnd() + "…" else it }.trimEnd('.', '。')
         val rest = if (selected.size > 1) " 외 ${selected.size - 1}개" else ""
         return "$where 할 일 $count 말했어. $text$rest."
     }
+
+    /**
+     * 리마인드에 보일·읽을 할 일 문구. 말한 날 기준의 상대 날짜(내일·오늘 …)로 시작하면 그 낱말을 뗀다 —
+     * 리마인드가 이미 "어제 퇴근길에" 처럼 언제 말했는지 붙이므로, 다음 날 "내일 거래처 서류…" 로 읽으면 날짜가 어긋난다.
+     * 저장된 항목 텍스트(카드·지난 기록)는 바꾸지 않는다.
+     */
+    fun itemText(text: String): String {
+        val t = text.trim()
+        val m = LEADING_DAY.find(t) ?: return t
+        return t.substring(m.range.last + 1).ifBlank { t }
+    }
+
+    private val LEADING_DAY = Regex("^(오늘|내일|모레|어제|이따가?)\\s+")
 
     /** 달력 날짜 차이로 오늘/어제/그저께/N일 전. */
     fun relativeDay(thenMillis: Long, nowMillis: Long, tz: TimeZone = TimeZone.getDefault()): String =

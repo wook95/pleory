@@ -68,6 +68,18 @@ class ArrivalReminderTest {
         assertNull(ArrivalReminder.line(emptyList(), now, parked = true, tz = tz))
     }
 
+    @Test fun line_dropsLeadingRelativeDayOfTheItem() {
+        val picked = ArrivalReminder.select(listOf(c(1, text = "내일 거래처 서류 다시 보내기")), currentSessionId = 9, nowMillis = now)
+        assertEquals("어제 퇴근길에 할 일 하나 말했어. 거래처 서류 다시 보내기.", ArrivalReminder.line(picked, now, parked = true, tz = tz))
+    }
+
+    @Test fun itemText_stripsOnlyALeadingDayWord() {
+        assertEquals("거래처 서류 다시 보내기", ArrivalReminder.itemText(" 오늘 거래처 서류 다시 보내기"))
+        assertEquals("보고서 내일 보내기", ArrivalReminder.itemText("보고서 내일 보내기"))
+        assertEquals("내일모레 출장 준비", ArrivalReminder.itemText("내일모레 출장 준비")) // 낱말 경계가 아니면 그대로
+        assertEquals("내일", ArrivalReminder.itemText("내일")) // 떼면 빈 문구가 되면 그대로
+    }
+
     @Test fun relativeDay_calendarDaysInZone() {
         // 오늘 00:10 KST 는 오늘, 어제 23:50 KST 는 어제(시간 차는 9시간 미만이어도)
         val midnight = now - (8 * hour + 30 * 60 * 1000L)

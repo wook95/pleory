@@ -211,14 +211,14 @@ class S1CardView(
             reminderStrip.addView(c.row().apply {
                 minimumHeight = c.dp(80)
                 addView(c.col().apply {
-                    addView(c.txt(Tok.BODY_M, Tok.FG, 500, s = r.text))
+                    addView(c.txt(Tok.BODY_M, Tok.FG, 500, s = ArrivalReminder.itemText(r.text)))
                     val whenText = "${ArrivalReminder.relativeDay(r.spokenAt, nowMillis)} ${CardFormat.segmentName(r.segment)}"
                     addView(c.txt(Tok.LABEL_S, Tok.SUB, s = whenText), lp().m(t = c.dp(6)))
                 }, lp(0, WRAP_CONTENT, 1f))
                 addView(c.button("했어", BtnKind.SECONDARY, padH = 28) {
                     onReminderDone(r.itemId)
                     setReminders(reminders.filter { it.itemId != r.itemId }, remindersNow)
-                }.apply { contentDescription = "‘${r.text}’ 했어" }, lp(WRAP_CONTENT).m(l = c.dp(16)))
+                }.apply { contentDescription = "‘${ArrivalReminder.itemText(r.text)}’ 했어" }, lp(WRAP_CONTENT).m(l = c.dp(16)))
             }, lp().m(t = c.dp(12)))
         }
         reminderStrip.addView(c.rule(), lp(MATCH_PARENT, c.dp(1)).m(t = c.dp(24), b = c.dp(32)))
