@@ -27,8 +27,10 @@ import ai.pleos.hello.platform.NaviListener
 import ai.pleos.hello.platform.ParkedFallback
 import ai.pleos.hello.platform.SdkHub
 import android.Manifest
+import android.app.Activity
 import android.app.Application
 import android.content.pm.PackageManager
+import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
@@ -93,8 +95,21 @@ class PleoryApp : Application() {
 
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
+    /** 보이는(started) Activity 수. 0 이면 백그라운드다. 메인 스레드에서만 바뀐다. */
+    @Volatile
+    private var startedActivities = 0
+
     override fun onCreate() {
         super.onCreate()
+        registerActivityLifecycleCallbacks(object : ActivityLifecycleCallbacks {
+            override fun onActivityStarted(activity: Activity) { startedActivities++ }
+            override fun onActivityStopped(activity: Activity) { startedActivities-- }
+            override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) = Unit
+            override fun onActivityResumed(activity: Activity) = Unit
+            override fun onActivityPaused(activity: Activity) = Unit
+            override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) = Unit
+            override fun onActivityDestroyed(activity: Activity) = Unit
+        })
         db = PleoryDb.get(this)
         consent = ConsentPrefs(this)
         sdkHub = SdkHub(this).also { it.start() }
@@ -103,7 +118,7 @@ class PleoryApp : Application() {
     }
 
     private fun assemble() {
-        liveContext = LiveContextProvider(sdkHub.location, clock, sdkHub.navi)
+        liveContext = LiveContextProvider(sdkHub.location, clock, sdkHub.navi, foreground = { startedActivities > 0 })
         speechInput = PcmInjectableSpeechInput(sdkHub.speechInput)
         controller = SessionController(
             store = RoomPleoryStore(db),

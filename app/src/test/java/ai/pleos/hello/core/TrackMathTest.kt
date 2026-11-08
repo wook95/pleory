@@ -83,4 +83,15 @@ class TrackMathTest {
         assertEquals(0.0, s.distanceKm, 0.0)
         assertEquals(0, s.congestionMin)
     }
+
+    @Test
+    fun `궤적 적재 간격은 포그라운드 5초 백그라운드 30초`() {
+        val s = TrackSampler()
+        assertTrue(s.due(0, foreground = true)) // 첫 점
+        s.taken(0)
+        assertFalse(s.due(4_999, foreground = true))
+        assertTrue(s.due(5_000, foreground = true))
+        assertFalse(s.due(29_999, foreground = false))
+        assertTrue(s.due(30_000, foreground = false))
+    }
 }

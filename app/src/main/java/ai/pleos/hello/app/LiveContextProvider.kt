@@ -7,6 +7,7 @@ import ai.pleos.hello.core.SegmentRule
 import ai.pleos.hello.core.TrackAccumulator
 import ai.pleos.hello.core.TrackMath
 import ai.pleos.hello.core.TrackSample
+import ai.pleos.hello.core.TrackSampler
 import ai.pleos.hello.data.Segment
 import ai.pleos.hello.platform.LocationFix
 import ai.pleos.hello.platform.DestinationState
@@ -23,9 +24,12 @@ class LiveContextProvider(
     private val clock: Clock,
     private val navi: NaviSource? = null,
     private val profileId: String = "local",
+    /** 앱 화면이 보이는가. 궤적 적재 간격(5초/30초)을 정한다. */
+    private val foreground: () -> Boolean = { true },
 ) : ContextProvider {
 
     private var track = TrackAccumulator()
+    private var sampler = TrackSampler()
     private val samples = ArrayList<TrackSample>()
     private var last: LocationFix? = null
 
@@ -36,7 +40,10 @@ class LiveContextProvider(
 
     private val listener: (LocationFix) -> Unit = { fix ->
         val sample = TrackSample(clock.nowMillis(), fix.lat, fix.lng)
-        if (track.add(sample)) samples += sample
+        if (sampler.due(sample.atMillis, foreground()) && track.add(sample)) {
+            samples += sample
+            sampler.taken(sample.atMillis)
+        }
         last = fix
     }
 
@@ -50,11 +57,13 @@ class LiveContextProvider(
     override fun onSessionStart() {
         sessionSegment = segment()
         track = TrackAccumulator()
+        sampler = TrackSampler()
         samples.clear()
         last?.let {
             val sample = TrackSample(clock.nowMillis(), it.lat, it.lng)
             track.add(sample)
             samples += sample
+            sampler.taken(sample.atMillis)
         }
     }
 

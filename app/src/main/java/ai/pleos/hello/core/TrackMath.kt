@@ -78,3 +78,25 @@ class TrackAccumulator {
         acceptedPoints = accepted,
     )
 }
+
+/**
+ * TrackPoint 적재 간격(PRD v4 §3·§12): 화면이 보이면 5초, 백그라운드면 30초. 위치 콜백 주기는 SDK 가 정하므로 앱이 거른다.
+ * 첫 점은 항상 받는다. 시각은 궤적과 같은 시계(DemoClock 일 수 있음)로 잰다.
+ */
+class TrackSampler {
+    private var lastAt: Long? = null
+
+    fun due(atMillis: Long, foreground: Boolean): Boolean {
+        val last = lastAt ?: return true
+        return atMillis - last >= if (foreground) FOREGROUND_MS else BACKGROUND_MS
+    }
+
+    fun taken(atMillis: Long) {
+        lastAt = atMillis
+    }
+
+    companion object {
+        const val FOREGROUND_MS = 5_000L
+        const val BACKGROUND_MS = 30_000L
+    }
+}
