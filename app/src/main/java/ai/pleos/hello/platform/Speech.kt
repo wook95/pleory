@@ -40,7 +40,10 @@ interface SpeechOutput {
 class PleosSpeechInput(context: Context, private val post: Post) : SpeechInput {
     private val stt = SpeechToText(context, SttMode.ON_DEVICE)
     private var ready = false
-    /** 진행 중인 STT 회차. 바인더 스레드 콜백이 읽으므로 volatile. cancel·종료 뒤에는 -1 이라 늦게 온 결과는 버린다. */
+    /**
+     * 진행 중인 STT 회차. 바인더 스레드 콜백이 읽으므로 volatile. final 전달·cancel·오류 뒤에는 -1 이라 늦게 온 결과는 버린다.
+     * SDK 는 onEndedRecognition 을 final 보다 먼저 보낸다(에뮬레이터 실측) — 그래서 Ended 에서는 회차를 끄지 않는다.
+     */
     @Volatile
     private var activeRound = -1
     private var pcmThread: Thread? = null
@@ -51,6 +54,7 @@ class PleosSpeechInput(context: Context, private val post: Post) : SpeechInput {
         override fun onUpdated(text: String, isFinal: Boolean) {
             val r = activeRound
             if (r < 0) return
+            if (isFinal) activeRound = -1
             post { if (isFinal) listener?.onFinal(text, r) else listener?.onPartial(text, r) }
         }
 
@@ -59,7 +63,6 @@ class PleosSpeechInput(context: Context, private val post: Post) : SpeechInput {
         override fun onEndedRecognition() {
             val r = activeRound
             if (r < 0) return
-            activeRound = -1
             post { listener?.onEnded(r) }
         }
 
