@@ -11,6 +11,11 @@ import ai.pleos.playground.tts.constant.Mode as TtsMode
 import ai.pleos.playground.tts.listener.EventListener
 import ai.pleos.playground.tts.listener.OnInitializeListener as TtsInit
 import android.content.Context
+import android.media.AudioAttributes
+import android.media.AudioFocusRequest
+import android.media.AudioManager
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import java.util.Locale
 
@@ -143,7 +148,15 @@ class PleosSpeechInput(context: Context, private val post: Post) : SpeechInput {
 /** TTS 도 ON_DEVICE 고정(D5). 이벤트 리스너는 initialize 성공 뒤에 등록한다(D10). */
 class PleosSpeechOutput(context: Context, private val post: Post) : SpeechOutput {
     private val tts = TextToSpeech(context, TtsMode.ON_DEVICE)
+    private val audioManager = context.getSystemService(AudioManager::class.java)
+    private val attrs = AudioAttributes.Builder()
+        .setUsage(AudioAttributes.USAGE_ASSISTANT)
+        .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+        .build()
     private var ready = false
+
+    /** 발화 중 잡고 있는 포커스 요청. 직렬 경로에서만 읽고 쓴다. */
+    private var focusRequest: AudioFocusRequest? = null
 
     override var onDone: (() -> Unit)? = null
 
@@ -151,14 +164,18 @@ class PleosSpeechOutput(context: Context, private val post: Post) : SpeechOutput
         override fun onStart() = Unit
         override fun onReady() = Unit
         override fun onDone() {
-            post { onDone?.invoke() }
+            post { abandonFocus(); onDone?.invoke() }
         }
 
         override fun onError(errorType: TtsError) {
             Log.w(TAG, "tts error $errorType")
+            post { abandonFocus() }
         }
 
-        override fun onStop() = Unit
+        override fun onStop() {
+            post { abandonFocus() }
+        }
+
         override fun onUpdatedRms(rms: Double) = Unit
     }
 
@@ -179,6 +196,7 @@ class PleosSpeechOutput(context: Context, private val post: Post) : SpeechOutput
 
     fun release() {
         ready = false
+        abandonFocus()
         runCatching { tts.removeEventListener(sdkListener) }
         runCatching { tts.release() }
     }
@@ -188,11 +206,38 @@ class PleosSpeechOutput(context: Context, private val post: Post) : SpeechOutput
             Log.w(TAG, "tts not ready, drop '$text'")
             return
         }
+        abandonFocus()
+        val request = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
+            .setAudioAttributes(attrs)
+            .setOnAudioFocusChangeListener({ change -> post { onFocusChange(change) } }, Handler(Looper.getMainLooper()))
+            .build()
+        if (FocusPolicy.onRequestResult(audioManager.requestAudioFocus(request)) == FocusPolicy.Action.SKIP) {
+            Log.w(TAG, "tts focus denied, skip '$text'")
+            post { onDone?.invoke() }
+            return
+        }
+        focusRequest = request
+        tts.setAudioAttributes(attrs)
         tts.speak(text, true)
     }
 
     override fun stop() {
         if (ready) runCatching { tts.stop() }
+        abandonFocus()
+    }
+
+    private fun onFocusChange(change: Int) {
+        if (focusRequest == null || FocusPolicy.onFocusChange(change) == FocusPolicy.Change.KEEP) return
+        Log.i(TAG, "tts focus lost $change")
+        runCatching { tts.stop() }
+        abandonFocus()
+        onDone?.invoke()
+    }
+
+    private fun abandonFocus() {
+        val r = focusRequest ?: return
+        focusRequest = null
+        audioManager.abandonAudioFocusRequest(r)
     }
 }
 
