@@ -134,6 +134,13 @@ class HistoryTest {
     }
 
     @Test
+    fun `끝이 시작보다 이르면 시작 시각만`() {
+        val s = session(1, today0 + (19 * 60 + 54) * min, durationMin = 0).copy(endedAt = today0 + (18 * 60 + 40) * min)
+        val r = History.rows(listOf(s), listOf(utt(10, 1, s.startedAt)), emptyList(), now, tz = tz).single()
+        assertEquals("19:54", r.timeRange)
+    }
+
+    @Test
     fun `짧은 거리는 소수 한 자리`() {
         val s = session(1, today0 + min).copy(distanceKm = 0.43, durationMin = 3)
         assertEquals("3분 · 0.4km", History.rows(listOf(s), emptyList(), emptyList(), now, tz = tz).single().stats)

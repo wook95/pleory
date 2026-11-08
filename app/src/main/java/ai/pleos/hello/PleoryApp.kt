@@ -82,6 +82,9 @@ class PleoryApp : Application() {
     /** 이번 세션의 구간(출근길·퇴근길·외출). S0 상태 텍스트가 쓴다. */
     val sessionSegment: Segment get() = liveContext.sessionSegment
 
+    /** 조회 파티션 키(지난 기록 S2 가 쓴다). */
+    fun profileId(): String = liveContext.profileId()
+
     /** 마지막으로 받은 기어. 모르면(OTHER·미수신) null — 화면 게이트는 null 을 닫힘으로 본다. */
     @Volatile
     var gear: ai.pleos.hello.core.Gear? = null

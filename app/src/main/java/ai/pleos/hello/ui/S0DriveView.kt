@@ -12,14 +12,17 @@ import android.widget.LinearLayout
  * 주행 중이므로 아무것도 움직이지 않는다(눌림 축소 없음, 색·문구만 바뀜). 말하기 버튼은 창 폭 전체의 아래 띠이고
  * 높이는 창의 3분의 1이다([LayoutMode]). 아이콘·글자는 운전석 쪽(왼쪽)에 둔다.
  */
-class S0DriveView(context: Context, private val onTalk: () -> Unit, onSettings: () -> Unit = {}) : FrameLayout(context) {
+class S0DriveView(context: Context, private val onTalk: () -> Unit, onSettings: () -> Unit = {}, onHistory: () -> Unit = {}) : FrameLayout(context) {
 
     private val segment = context.txt(Tok.TITLE_L, Tok.FG, 700, s = "기록 중")
     private val button = LinearLayout(context)
     private val glyph = MicGlyph(context)
     private val label = context.txt(Tok.HEAD_M, Tok.FG, 700)
     private val hint = context.txt(Tok.BODY_L, Tok.ON_PRIMARY, s = "한 번 더 누르면 취소")
-    private val settings = context.button("설정", BtnKind.TEXT, padH = 28, scale = false) { onSettings() }
+    private val settings = context.row().apply {
+        addView(context.button("지난 기록", BtnKind.TEXT, padH = 28, scale = false) { onHistory() }, lp(LayoutParams.WRAP_CONTENT))
+        addView(context.button("설정", BtnKind.TEXT, padH = 28, scale = false) { onSettings() }, lp(LayoutParams.WRAP_CONTENT).m(l = context.dp(8)))
+    }
     private var listening: Boolean? = null
     private var shortButton = false
 
@@ -88,7 +91,7 @@ class S0DriveView(context: Context, private val onTalk: () -> Unit, onSettings: 
         }
     }
 
-    /** 설정 진입. 주차(P)·제한 없음일 때만 보인다(TRD §8-1 5번). */
+    /** 지난 기록·설정 진입. 주차(P)·제한 없음일 때만 보인다(TRD §8-1 5번). */
     fun setSettingsVisible(visible: Boolean) {
         settings.visibility = if (visible) VISIBLE else GONE
     }

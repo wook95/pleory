@@ -6,11 +6,13 @@ import ai.pleos.hello.core.Screen
 import ai.pleos.hello.core.ScreenGate
 import ai.pleos.hello.core.SessionEvent
 import ai.pleos.hello.core.SessionState
+import ai.pleos.hello.data.RoomPleoryStore
 import ai.pleos.hello.gleo.GleoActionReceiver
 import ai.pleos.hello.platform.Gear
 import ai.pleos.hello.ui.ConsentView
 import ai.pleos.hello.ui.S0DriveView
 import ai.pleos.hello.ui.S1CardView
+import ai.pleos.hello.ui.S2HistoryView
 import ai.pleos.hello.ui.SettingsView
 import android.Manifest
 import android.app.Activity
@@ -38,12 +40,23 @@ class MainActivity : Activity() {
     private lateinit var card: S1CardView
     private lateinit var consentView: ConsentView
     private lateinit var settingsView: SettingsView
+    private lateinit var historyView: S2HistoryView
+    private val historyStore by lazy { RoomPleoryStore(app.db) }
+    private var historyLoad: Job? = null
     private val uiScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var cardLoad: Job? = null
     private var cardShown = false
+
+    /** 지금 카드 자리에 보이는 것: 지난 기록에서 연 세션 id, 평소 카드면 [LIVE_CARD], 카드가 안 보이면 null. 바뀌면 다시 읽는다. */
+    private var shownCard: Long? = null
     private var lastState = SessionState.OFF
     private var settingsOpen = false
     private var consentRequested = false
+
+    /** S2 지난 기록(F11). [historySession] 은 그 안에서 연 지난 카드 — 뒤로 가면 목록으로 돌아간다. */
+    private var historyOpen = false
+    private var historySession: Long? = null
+    private var historyTodoOnly = false
 
     /** Gleo SHOW_TODAY_CARD 로 연 카드. 도착 전이면 지금 세션, 닫힌 뒤면 마지막 세션의 카드다. 게이트가 닫히면 내린다. */
     private var cardRequested = false
@@ -66,7 +79,7 @@ class MainActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        view = S0DriveView(this, { app.controller.post(SessionEvent.TalkTapped) }, ::openSettings)
+        view = S0DriveView(this, { app.controller.post(SessionEvent.TalkTapped) }, ::openSettings, ::openHistory)
         card = S1CardView(
             this,
             onReplay = { app.controller.replaySummary() },
@@ -75,6 +88,13 @@ class MainActivity : Activity() {
             onSettings = ::openSettings,
             // 카드는 주차·제한 없음일 때만 보이지만(ScreenGate), 탭과 기어 변경이 엇갈려도 주행 중에는 지우지 않는다
             onDeleteItem = { id -> if (app.gateAllowed()) app.controller.deleteItem(id) },
+            onHistory = ::openHistory,
+        ).apply { visibility = View.GONE }
+        historyView = S2HistoryView(
+            this,
+            onBack = ::closeHistory,
+            onOpen = ::openHistoryCard,
+            onFilter = { historyTodoOnly = it; loadHistory() },
         ).apply { visibility = View.GONE }
         // 동의는 두 버튼만 인정한다. 뒤로 가기·자동 수락은 동의로 치지 않는다.
         consentView = ConsentView(this, onAgree = { answer { it.grant(app.clock.nowMillis()) }; app.warmLlm() }, onDecline = { answer { it.decline(app.clock.nowMillis()) } })
@@ -89,6 +109,7 @@ class MainActivity : Activity() {
         setContentView(FrameLayout(this).apply {
             addView(view)
             addView(card)
+            addView(historyView)
             addView(settingsView)
             addView(consentView)
         })
@@ -114,6 +135,8 @@ class MainActivity : Activity() {
                 Log.i(PleoryApp.FLOW_TAG, "gleo ${GleoActionReceiver.FN_SHOW_TODAY_CARD} parked=$parked")
                 if (parked) {
                     settingsOpen = false
+                    historyOpen = false
+                    historySession = null
                     cardRequested = true
                     render(lastState)
                 }
@@ -155,26 +178,33 @@ class MainActivity : Activity() {
             settingsOpen = false
             consentRequested = false
             cardRequested = false
+            historyOpen = false // 주행 중에는 지난 기록을 닫는다(F11)
+            historySession = null
         }
-        val screen = ScreenGate.resolve(allowed, app.consent.needsPrompt || consentRequested, settingsOpen, state, cardRequested)
+        val screen = ScreenGate.resolve(allowed, app.consent.needsPrompt || consentRequested, settingsOpen, state, cardRequested, historyOpen)
         // 동의 화면이 카드를 가리는 동안에는 요약을 막고, 답한 뒤 카드가 보이면 한 번만 읽는다
         app.controller.holdSummary(state == SessionState.CARD && screen == Screen.CONSENT)
         if (state != SessionState.CARD) summaryOwed = false
         else if (screen == Screen.CONSENT) summaryOwed = true
         else if (screen != Screen.CARD) app.controller.skipSummary() // 카드가 닫히면 요약 음성도 멈춘다
+        val browsing = if (screen == Screen.HISTORY) historySession else null
+        val cardNow = browsing ?: if (screen == Screen.CARD) LIVE_CARD else null
         view.visibility = if (screen == Screen.S0) View.VISIBLE else View.GONE
-        card.visibility = if (screen == Screen.CARD) View.VISIBLE else View.GONE
+        card.visibility = if (cardNow != null) View.VISIBLE else View.GONE
+        historyView.visibility = if (screen == Screen.HISTORY && browsing == null) View.VISIBLE else View.GONE
         consentView.visibility = if (screen == Screen.CONSENT) View.VISIBLE else View.GONE
         settingsView.visibility = if (screen == Screen.SETTINGS) View.VISIBLE else View.GONE
         view.setListening(state == SessionState.LISTENING)
         view.setSegmentName(CardFormat.segmentName(app.sessionSegment))
         view.setSettingsVisible(allowed)
-        val isCard = screen == Screen.CARD
-        if (isCard && !cardShown) {
+        if (cardNow != null && cardNow != shownCard) {
+            // 지난 기록에서 연 카드는 요약을 자동으로 읽지 않는다(F11) — 요약은 지금 세션 것이다
+            card.setBrowsing(if (browsing != null) ::closeHistoryCard else null)
             loadCard()
-            if (summaryOwed) { summaryOwed = false; app.controller.replaySummary() } // 재생 중이면 컨트롤러가 무시한다
+            if (browsing == null && summaryOwed) { summaryOwed = false; app.controller.replaySummary() } // 재생 중이면 컨트롤러가 무시한다
         }
-        cardShown = isCard
+        shownCard = cardNow
+        cardShown = cardNow != null
     }
 
     private fun answer(record: (ai.pleos.hello.data.ConsentPrefs) -> Unit) {
@@ -197,10 +227,52 @@ class MainActivity : Activity() {
         render(lastState)
     }
 
+    /** S0·S1 의 "지난 기록". 주차·제한 없음일 때만 연다. */
+    private fun openHistory() {
+        if (!app.gateAllowed()) return
+        historyOpen = true
+        historySession = null
+        render(lastState)
+        loadHistory()
+    }
+
+    private fun closeHistory() {
+        historyOpen = false
+        historySession = null
+        historyLoad?.cancel()
+        render(lastState)
+    }
+
+    private fun openHistoryCard(sessionId: Long) {
+        if (!app.gateAllowed()) return
+        Log.i(PleoryApp.FLOW_TAG, "history open card session=$sessionId")
+        historySession = sessionId
+        render(lastState)
+    }
+
+    /** 지난 카드에서 목록으로. 그 카드에서 항목을 지웠을 수 있으니 목록을 다시 읽는다. */
+    private fun closeHistoryCard() {
+        historySession = null
+        render(lastState)
+        loadHistory()
+    }
+
+    private fun loadHistory() {
+        historyLoad?.cancel()
+        val todoOnly = historyTodoOnly
+        historyLoad = uiScope.launch {
+            val rows = historyStore.history(app.profileId(), app.clock.nowMillis(), todoOnly)
+            Log.i(PleoryApp.FLOW_TAG, "history rows=${rows.size} todoOnly=$todoOnly")
+            historyView.setRows(rows, todoOnly)
+        }
+    }
+
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
         when {
             settingsOpen -> closeSettings()
+            historySession != null -> closeHistoryCard()
+            historyOpen -> closeHistory()
             cardRequested && lastState != SessionState.CARD -> { cardRequested = false; render(lastState) }
             else -> super.onBackPressed()
         }
@@ -210,8 +282,13 @@ class MainActivity : Activity() {
     private fun loadCard() {
         cardLoad?.cancel()
         val requested = cardRequested && lastState != SessionState.CARD
+        val past = historySession
         cardLoad = uiScope.launch {
-            val m = if (requested) app.controller.loadTodayCard() else app.controller.loadCard()
+            val m = when {
+                past != null -> historyStore.loadCard(past)
+                requested -> app.controller.loadTodayCard()
+                else -> app.controller.loadCard()
+            }
             if (m != null) card.setModel(m) else card.clearModel() // 전체 삭제 뒤에는 세션 행이 없다
         }
     }
@@ -232,5 +309,6 @@ class MainActivity : Activity() {
 
     private companion object {
         const val REQUEST_PERMISSIONS = 1
+        const val LIVE_CARD = -1L
     }
 }

@@ -38,6 +38,7 @@ class S1CardView(
     private val onQr: () -> Unit,
     private val onSettings: () -> Unit = {},
     private val onDeleteItem: (Long) -> Unit = {},
+    private val onHistory: () -> Unit = {},
 ) : LinearLayout(context) {
 
     private val page = context.col()
@@ -55,11 +56,21 @@ class S1CardView(
     }
     private val primary = context.button("15초 요약 듣기", BtnKind.PRIMARY, PlayGlyph(context, Tok.ON_PRIMARY)) { onReplay() }
     private val primaryLabel = primary.findViewWithTag<TextView>(BUTTON_LABEL)
+    private val qr = context.button("폰에서 열기", BtnKind.SECONDARY, PhoneGlyph(context, Tok.FG)) { onQr() }
+    private val history = context.button("지난 기록", BtnKind.TEXT, padH = 28) { onHistory() }
+    private val settings = context.button("설정", BtnKind.TEXT, padH = 28) { onSettings() }
+
+    /** 지난 기록에서 연 카드일 때만 보이는 되돌아가기. 그때는 요약·폰·설정 버튼을 숨긴다(요약은 지금 세션 것이라). */
+    private var onBrowseBack: (() -> Unit)? = null
+    private val back = context.button("지난 기록으로", BtnKind.SECONDARY, BackGlyph(context, Tok.FG)) { onBrowseBack?.invoke() }
+        .apply { visibility = GONE }
     private val actions = context.row().apply {
+        addView(back, lp(WRAP_CONTENT))
         addView(primary, lp(WRAP_CONTENT))
-        addView(context.button("폰에서 열기", BtnKind.SECONDARY, PhoneGlyph(context, Tok.FG)) { onQr() }, lp(WRAP_CONTENT).m(l = context.dp(16)))
+        addView(qr, lp(WRAP_CONTENT).m(l = context.dp(16)))
         addView(View(context), lp(0, 1, 1f))
-        addView(context.button("설정", BtnKind.TEXT, padH = 28) { onSettings() }, lp(WRAP_CONTENT))
+        addView(history, lp(WRAP_CONTENT))
+        addView(settings, lp(WRAP_CONTENT).m(l = context.dp(8)))
     }
     private var mode: LayoutMode? = null
     private var model: CardModel? = null
@@ -163,9 +174,21 @@ class S1CardView(
         }
     }
 
+    /**
+     * 지난 기록(S2)에서 연 카드면 [onBack] 을 준다 — 아래 줄이 "지난 기록으로" 하나가 되고 요약 자막도 뜨지 않는다.
+     * null 이면 평소 카드(도착·Gleo)로 돌아간다.
+     */
+    fun setBrowsing(onBack: (() -> Unit)?) {
+        onBrowseBack = onBack
+        val browsing = onBack != null
+        back.visibility = if (browsing) VISIBLE else GONE
+        listOf(primary, qr, history, settings).forEach { it.visibility = if (browsing) GONE else VISIBLE }
+        if (browsing) summaryBlock.visibility = GONE
+    }
+
     /** 요약 재생 중이면 자막과 "건너뛰기" 를 보이고, null 이면 숨긴다(PRD §4-2). 재생 중에는 주 버튼이 "다시 듣기" 다. */
     fun setSummary(text: String?) {
-        summaryBlock.visibility = if (text == null) GONE else VISIBLE
+        summaryBlock.visibility = if (text == null || onBrowseBack != null) GONE else VISIBLE
         subtitle.text = text.orEmpty()
         primaryLabel.text = if (text == null) "15초 요약 듣기" else "다시 듣기"
         primary.contentDescription = primaryLabel.text

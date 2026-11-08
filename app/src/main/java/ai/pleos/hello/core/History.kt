@@ -67,7 +67,9 @@ object History {
             sessionId = session.id,
             day = day,
             segment = CardFormat.segmentName(session.segment),
-            timeRange = "${CardFormat.time(session.startedAt, tz)}–${CardFormat.time(endedAt, tz)}",
+            // 끝이 시작보다 이르면(데모 시계로 끝난 세션) 시작 시각만 쓴다
+            timeRange = if (endedAt <= session.startedAt) CardFormat.time(session.startedAt, tz)
+            else "${CardFormat.time(session.startedAt, tz)}–${CardFormat.time(endedAt, tz)}",
             stats = "${session.durationMin}분 · ${CardModelBuilder.km(session.distanceKm)}km",
             moods = card.items.filter { it.type != ItemType.RAW }.map { it.emotion },
             itemCount = card.items.size,

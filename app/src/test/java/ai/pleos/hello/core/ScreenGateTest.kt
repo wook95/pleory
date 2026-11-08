@@ -55,4 +55,12 @@ class ScreenGateTest {
         assertEquals(Screen.SETTINGS, ScreenGate.resolve(true, false, true, SessionState.SESSION_OPEN, cardRequested = true))
         assertEquals(Screen.S0, ScreenGate.resolve(false, false, false, SessionState.SESSION_OPEN, cardRequested = true))
     }
+
+    @Test fun resolve_history_overCard_butNotWhileDrivingOrOverConsentSettings() {
+        assertEquals(Screen.HISTORY, ScreenGate.resolve(true, false, false, SessionState.SESSION_OPEN, historyOpen = true))
+        assertEquals(Screen.HISTORY, ScreenGate.resolve(true, false, false, SessionState.CARD, historyOpen = true))
+        assertEquals(Screen.SETTINGS, ScreenGate.resolve(true, false, true, SessionState.CARD, historyOpen = true))
+        assertEquals(Screen.CONSENT, ScreenGate.resolve(true, true, false, SessionState.CARD, historyOpen = true))
+        assertEquals(Screen.S0, ScreenGate.resolve(false, false, false, SessionState.SESSION_OPEN, historyOpen = true))
+    }
 }
