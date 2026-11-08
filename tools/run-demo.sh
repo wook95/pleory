@@ -20,6 +20,6 @@ HERE="${0:A:h}"
 
 # 이전 실행이 남긴 마지막 위치(에뮬레이터가 계속 반복 송출)를 출발점에서 먼 곳으로 치워 둔다.
 "$ADB" emu geo fix 126.9 37.4 >/dev/null
-"$ADB" shell am start -W --user 10 -n com.pplab.pleory/ai.pleos.hello.debugpanel.DebugPanelActivity \
+"$ADB" shell am start -W --user 10 -f 0x18000000 -n com.pplab.pleory/ai.pleos.hello.debugpanel.DebugPanelActivity \
   --es action demo --es mode "$MODE" --ef speed "$SPEED" >/dev/null
 ADB="$ADB" "$HERE/play-route.sh" "$SPEED"
