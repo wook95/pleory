@@ -84,4 +84,12 @@ class SummaryComposerTest {
         val items = List(12) { emo(Emotion.NEUTRAL) } + todo
         assertEquals(40, SummaryComposer.compose(items).length)
     }
+
+    // 카드 감정 흐름·핀과 같이 원문(RAW, 정리 전·실패) 항목은 감정으로 세지 않는다
+    @Test fun rawItemsAreNotCountedAsEmotion() {
+        val rawOnly = listOf(SummaryItem(ItemType.RAW), SummaryItem(ItemType.RAW))
+        assertEquals("생각이 좀 있었네.", SummaryComposer.compose(rawOnly))
+        val mixed = listOf(SummaryItem(ItemType.RAW, Emotion.DOWN), SummaryItem(ItemType.EMOTION, Emotion.UP))
+        assertEquals("오늘은 괜찮았네.", SummaryComposer.compose(mixed))
+    }
 }
