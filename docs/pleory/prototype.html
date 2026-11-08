@@ -1,0 +1,316 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pleory 프로토타입 v1</title>
+<style>
+:root{--bg:#0B1220;--panel:#101A2E;--line:rgba(255,255,255,.08);--txt:#E8ECF2;--mut:#7F8EA3;--cyan:#00AAD2;--down:#E05A6A;--mid:#E0A24A;--up:#00AAD2;--navy:#002C5F}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:#05080F;color:var(--txt);font-family:'Noto Sans KR','Noto Sans CJK KR',-apple-system,sans-serif;word-break:keep-all;-webkit-font-smoothing:antialiased}
+.app{display:grid;grid-template-columns:1fr 320px;height:100vh}
+/* ── 차량 디스플레이 ── */
+.stage{position:relative;display:flex;align-items:center;justify-content:center;background:#05080F;padding:24px;overflow:hidden}
+.display{position:relative;width:1280px;height:480px;background:var(--bg);border-radius:18px;border:1px solid var(--line);overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.6);transform-origin:center}
+.screen{position:absolute;inset:0;display:none}
+.screen.on{display:block}
+/* S0 주행 */
+#s0{background:radial-gradient(1200px 600px at 20% 120%,#0f1c33 0%,var(--bg) 60%)}
+#s0 .status{position:absolute;left:36px;top:28px;font-size:15px;color:var(--mut);letter-spacing:.06em}
+#s0 .status b{color:var(--txt);font-weight:600}
+#s0 .hint{position:absolute;left:36px;bottom:28px;font-size:13px;color:var(--mut)}
+#s0 .nav{position:absolute;inset:0;opacity:.35}
+.bigbtn{position:absolute;right:48px;bottom:48px;width:150px;height:150px;border-radius:50%;background:var(--cyan);color:#04202A;border:0;font-size:20px;font-weight:700;cursor:pointer;box-shadow:0 0 0 0 rgba(0,170,210,.5);transition:transform .1s}
+.bigbtn:active{transform:scale(.96)}
+.bigbtn.listening{background:#fff;animation:pulse 1.2s infinite}
+.bigbtn.left{right:auto;left:48px}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(255,255,255,.45)}100%{box-shadow:0 0 0 28px rgba(255,255,255,0)}}
+.toast{position:absolute;left:50%;top:40px;transform:translateX(-50%);background:rgba(255,255,255,.1);border:1px solid var(--line);padding:10px 18px;border-radius:12px;font-size:17px;opacity:0;transition:opacity .2s;pointer-events:none}
+.toast.on{opacity:1}
+.off{position:absolute;inset:0;background:#000;display:flex;align-items:center;justify-content:center;color:#2a3344;font-size:15px;letter-spacing:.2em}
+/* S1 카드 */
+#s1{display:none;grid-template-columns:1.2fr 1fr}
+#s1.on{display:grid}
+.map{position:relative;background:var(--panel);overflow:hidden}
+.map svg{position:absolute;inset:0;width:100%;height:100%}
+.map .top{position:absolute;left:32px;top:26px}
+.map .k{font-size:12px;letter-spacing:.14em;color:var(--mut)}
+.map h1{font-size:30px;font-weight:700;margin-top:4px;letter-spacing:-.01em}
+.map .m{font-size:14px;color:#9FB0C5;margin-top:4px}
+.pin{position:absolute;display:flex;align-items:center;gap:8px;transform:translate(-11px,-11px)}
+.pin .dot{width:18px;height:18px;border-radius:50%;border:3px solid var(--bg);box-shadow:0 0 0 3px rgba(255,255,255,.08);flex:none}
+.pin .lab{background:rgba(11,18,32,.9);border:1px solid var(--line);padding:6px 10px;border-radius:9px;font-size:12px;max-width:210px;line-height:1.35}
+.pin .lab small{display:block;color:var(--mut);font-size:10px;margin-top:2px}
+.map .note{position:absolute;left:32px;bottom:22px;font-size:11px;color:var(--mut)}
+.map .week{position:absolute;right:20px;top:24px;font-size:12px;color:var(--mut);background:rgba(255,255,255,.06);padding:6px 10px;border-radius:8px;cursor:pointer;border:1px solid var(--line)}
+.side{padding:26px 28px;display:flex;flex-direction:column;gap:12px;border-left:1px solid var(--line);overflow:hidden}
+.stats{display:flex;gap:18px}
+.st .v{font-size:26px;font-weight:700;letter-spacing:-.02em}
+.st .v small{font-size:13px;font-weight:500;color:#9FB0C5}
+.st .l{font-size:11px;color:var(--mut)}
+.flow{display:flex;align-items:center;gap:8px}
+.flow .bar{height:8px;border-radius:5px;flex:1}
+.flow .t{font-size:11px;color:var(--mut)}
+.items{display:flex;flex-direction:column;gap:8px;overflow:auto;flex:1;min-height:0}
+.item{display:grid;grid-template-columns:12px 1fr;gap:10px;align-items:start;padding:10px 12px;border-radius:11px;background:rgba(255,255,255,.04);border:1px solid var(--line);cursor:pointer}
+.item:hover{background:rgba(255,255,255,.07)}
+.item .c{width:12px;height:12px;border-radius:50%;margin-top:5px}
+.item .txt{font-size:15px;line-height:1.4}
+.item .meta{font-size:11px;color:var(--mut);margin-top:3px}
+.tag{display:inline-block;font-size:10px;padding:1px 7px;border-radius:999px;background:rgba(0,170,210,.15);color:#7CD5EA;margin-left:5px;vertical-align:middle}
+.tag.raw{background:rgba(255,255,255,.1);color:#aab}
+.actions{display:flex;gap:8px;align-items:center;margin-top:auto}
+.btn{padding:10px 16px;border-radius:11px;font-size:14px;font-weight:600;background:var(--cyan);color:#04202A;border:0;cursor:pointer;font-family:inherit}
+.btn.g{background:rgba(255,255,255,.08);color:var(--txt)}
+.btn.sm{padding:6px 10px;font-size:12px}
+.qr{margin-left:auto;display:flex;align-items:center;gap:8px;color:#9FB0C5;font-size:11px;cursor:pointer}
+.qr .box{width:44px;height:44px;background:#fff;border-radius:6px;background-image:linear-gradient(90deg,#111 50%,transparent 50%),linear-gradient(#111 50%,transparent 50%);background-size:7px 7px;opacity:.9}
+.summary{background:rgba(0,170,210,.1);border:1px solid rgba(0,170,210,.3);border-radius:11px;padding:10px 12px;font-size:14px;display:none}
+.summary.on{display:block}
+.summary .p{height:3px;background:rgba(255,255,255,.1);border-radius:3px;margin-top:8px;overflow:hidden}
+.summary .p i{display:block;height:100%;width:0;background:var(--cyan)}
+.summary .row{display:flex;justify-content:space-between;align-items:center;margin-top:6px;font-size:11px;color:var(--mut)}
+/* 편집 시트 / 모달 */
+.modal{position:absolute;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center}
+.modal.on{display:flex}
+.sheet{background:#121C30;border:1px solid var(--line);border-radius:16px;padding:22px;width:460px}
+.sheet h3{font-size:15px;color:var(--mut);font-weight:500;margin-bottom:10px}
+.sheet textarea{width:100%;background:rgba(255,255,255,.05);border:1px solid var(--line);color:var(--txt);border-radius:10px;padding:10px;font-size:15px;font-family:inherit;resize:none;height:70px}
+.sheet .types{display:flex;gap:6px;margin:12px 0}
+.sheet .types button{flex:1;padding:8px;border-radius:9px;border:1px solid var(--line);background:transparent;color:var(--txt);cursor:pointer;font-family:inherit;font-size:13px}
+.sheet .types button.sel{background:var(--cyan);color:#04202A;border-color:var(--cyan)}
+.sheet .orig{font-size:12px;color:var(--mut);margin-bottom:10px}
+.sheet .row{display:flex;gap:8px;justify-content:flex-end}
+.qrbig{width:220px;height:220px;background:#fff;border-radius:10px;margin:0 auto 14px;background-image:linear-gradient(90deg,#111 50%,transparent 50%),linear-gradient(#111 50%,transparent 50%);background-size:12px 12px}
+/* S2 지도 / S3 설정 */
+.page{padding:28px 36px;height:100%;display:grid;grid-template-columns:1fr 1.1fr;gap:24px}
+.page h2{font-size:22px;font-weight:700;margin-bottom:12px}
+.page .sub{font-size:13px;color:var(--mut);margin-bottom:14px}
+.list{display:flex;flex-direction:column;gap:8px;overflow:auto;max-height:360px}
+.sess{padding:10px 14px;border-radius:11px;background:rgba(255,255,255,.04);border:1px solid var(--line);display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;cursor:pointer}
+.sess.sel{border-color:var(--cyan)}
+.sess .d{font-size:14px;font-weight:600}.sess .s{font-size:11px;color:var(--mut)}
+.sess .fl{display:flex;gap:3px;width:70px}.sess .fl i{flex:1;height:6px;border-radius:3px}
+.mini{background:var(--panel);border-radius:14px;height:340px;position:relative;overflow:hidden;border:1px solid var(--line)}
+.back{position:absolute;left:36px;bottom:22px;font-size:13px;color:var(--mut);cursor:pointer}
+.set{display:flex;flex-direction:column;gap:10px}
+.set .row{display:flex;justify-content:space-between;align-items:center;padding:12px 14px;border-radius:11px;background:rgba(255,255,255,.04);border:1px solid var(--line);font-size:14px}
+.set .row span{color:var(--mut);font-size:12px}
+.seg{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{padding:6px 12px;background:transparent;border:0;color:var(--txt);cursor:pointer;font-family:inherit;font-size:12px}
+.seg button.sel{background:var(--cyan);color:#04202A}
+/* ── 버추얼 콘솔 ── */
+.console{background:#0D1424;border-left:1px solid var(--line);padding:18px;display:flex;flex-direction:column;gap:12px;overflow:auto}
+.console h4{font-size:12px;letter-spacing:.14em;color:var(--mut);font-weight:600}
+.console .state{font-size:13px;padding:8px 10px;border-radius:9px;background:rgba(0,170,210,.12);border:1px solid rgba(0,170,210,.3)}
+.console .state b{color:var(--cyan)}
+.cb{display:block;width:100%;text-align:left;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:rgba(255,255,255,.04);color:var(--txt);cursor:pointer;font-family:inherit;font-size:13px}
+.cb:hover{background:rgba(255,255,255,.08)}
+.cb:disabled{opacity:.35;cursor:default}
+.cb small{display:block;color:var(--mut);font-size:11px;margin-top:2px}
+.console select,.console input{width:100%;padding:8px 10px;border-radius:9px;border:1px solid var(--line);background:#0B1220;color:var(--txt);font-family:inherit;font-size:13px}
+.log{font-size:11px;color:var(--mut);line-height:1.5;max-height:180px;overflow:auto;border-top:1px solid var(--line);padding-top:8px;font-family:ui-monospace,monospace}
+.log div b{color:var(--txt);font-weight:500}
+.chk{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--mut)}
+</style>
+</head>
+<body>
+<div class="app">
+<div class="stage"><div class="display" id="display">
+
+  <!-- S0 주행 화면 -->
+  <section class="screen on" id="s0">
+    <div class="status" id="status">시동 OFF</div>
+    <div class="hint">주행 중에는 이 버튼 하나만 동작합니다 · 응답은 TTS "적어뒀어" 한 문장, 화면은 바뀌지 않음 · 내비는 별도 앱</div>
+    <button class="bigbtn" id="bigbtn" disabled>말하기</button>
+    <div class="off" id="offcover">PLEOS · 시동 OFF</div>
+  </section>
+
+  <!-- S1 카드 -->
+  <section class="screen" id="s1">
+    <div class="map">
+      <svg viewBox="0 0 760 480" preserveAspectRatio="none"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#E05A6A"/><stop offset=".5" stop-color="#E0A24A"/><stop offset="1" stop-color="#00AAD2"/></linearGradient></defs>
+      <g stroke="#1A2740" stroke-width="2" fill="none"><path d="M0 340 L760 330"/><path d="M0 200 L760 210"/><path d="M130 0 L160 480"/><path d="M340 0 L370 480"/><path d="M560 0 L540 480"/></g>
+      <path id="route" d="M70 380 C 190 340, 280 310, 360 290 S 540 240, 690 160" stroke="url(#g)" stroke-width="6" fill="none" stroke-linecap="round"/>
+      <circle cx="70" cy="380" r="5" fill="#7F8EA3"/><circle cx="690" cy="160" r="5" fill="#fff"/></svg>
+      <div class="top"><div class="k" id="c_date">오늘의 나</div><h1 id="c_title">퇴근길 51분</h1><div class="m" id="c_meta"></div></div>
+      <div class="week" onclick="go('s2')">이번 주 →</div><div class="week" style="right:112px" onclick="go('s3')">설정</div>
+      <div id="pins"></div>
+      <div class="note">기어 P에서만 표시됩니다 · 주행 중에는 음성 응답만</div>
+    </div>
+    <div class="side">
+      <div class="stats"><div class="st"><div class="v" id="st_min">51<small>분</small></div><div class="l">주행 시간</div></div><div class="st"><div class="v" id="st_km">23<small>km</small></div><div class="l">주행 거리</div></div><div class="st"><div class="v" id="st_utt">0</div><div class="l">한마디</div></div><div class="st"><div class="v" id="st_items">0</div><div class="l">항목</div></div></div>
+      <div class="flow"><span class="t">감정 흐름</span><div id="flow" style="display:flex;gap:6px;flex:1"></div><span class="t" id="flowtxt"></span></div>
+      <div class="summary" id="summary"><div id="sum_txt"></div><div class="p"><i id="sum_bar"></i></div><div class="row"><span>15초 요약 · TTS 재생 중</span><button class="btn g sm" onclick="skipSummary()">건너뛰기</button></div></div>
+      <div class="items" id="items"></div>
+      <div class="actions"><button class="btn" onclick="playSummary()">15초 요약 듣기</button><button class="btn g" onclick="editHint()">수정</button><div class="qr" onclick="openQR()"><div class="box"></div><div>폰에서 열기<br>QR</div></div></div>
+    </div>
+    <div class="modal" id="edit"><div class="sheet"><h3>항목 수정 — 원문은 그대로 남습니다</h3><textarea id="e_txt"></textarea><div class="types" id="e_types"></div><div class="orig" id="e_orig"></div><div class="row"><button class="btn g" onclick="delItem()">삭제</button><button class="btn g" onclick="closeEdit()">취소</button><button class="btn" onclick="saveEdit()">저장</button></div></div></div>
+    <div class="modal" id="qrm" onclick="this.classList.remove('on')"><div class="sheet" style="text-align:center;width:360px"><div class="qrbig"></div><div style="font-size:13px;color:var(--mut)">QR에 카드 텍스트가 평문으로 직접 담깁니다(서버 없음).<br>폰 카메라로 스캔하면 텍스트가 뜹니다. 복사·공유는 폰 기본 기능.</div><div style="font-size:11px;color:var(--mut);margin-top:10px" id="qr_bytes"></div></div></div>
+  </section>
+
+  <!-- S2 나의 지도 -->
+  <section class="screen" id="s2">
+    <div class="page"><div><h2>나의 지도 · 이번 주</h2><div class="sub">통근마다 한 편. 정차 중에만 열립니다.</div><div class="list" id="weeklist"></div></div>
+    <div><div class="mini" id="mini"></div><div style="font-size:12px;color:var(--mut);margin-top:10px" id="mini_cap"></div></div></div>
+    <div class="back" onclick="go('s1')">← 오늘의 나</div>
+  </section>
+
+  <!-- S3 설정 -->
+  <section class="screen" id="s3">
+    <div class="page" style="grid-template-columns:1fr 1fr"><div><h2>설정</h2><div class="sub">정차 중에만 열립니다. 외부 서비스 연동 항목은 없습니다.</div>
+      <div class="set">
+        <div class="row"><div>집 <span id="homeLbl">등록됨 · 현재 위치</span></div><button class="btn g sm" onclick="log('집 위치를 현재 위치로 다시 등록')">현재 위치로</button></div>
+        <div class="row"><div>회사 <span id="workLbl">등록됨</span></div><button class="btn g sm" onclick="log('회사 위치를 현재 위치로 다시 등록')">현재 위치로</button></div>
+        <div class="row"><div>말하기 버튼 위치</div><div class="seg"><button class="sel" onclick="btnSide('right',this)">오른쪽</button><button onclick="btnSide('left',this)">왼쪽</button></div></div>
+        <div class="row"><div>전체 삭제 <span>모든 기록을 차량에서 지웁니다</span></div><button class="btn g sm" onclick="wipe()">삭제</button></div>
+      </div></div>
+      <div><h2 style="color:var(--mut);font-size:15px;font-weight:500">데이터 원칙</h2><ul style="font-size:13px;color:#9FB0C5;line-height:1.7;padding-left:18px"><li>음성 원문은 저장하지 않음. 텍스트만 차량 로컬</li><li>LLM에는 발화 텍스트만, 날씨·주소 조회에는 좌표만. 식별자 없음</li><li>기록은 Pleos 운전자 프로필 단위로 분리</li><li>캘린더·메신저·SNS 등 외부 서비스 연동 없음</li><li>차 밖으로 나가는 경로는 QR을 직접 열 때뿐</li></ul></div></div>
+    <div class="back" onclick="go('s1')">← 오늘의 나</div>
+  </section>
+</div></div>
+
+<!-- ── 버추얼 콘솔 ── -->
+<aside class="console">
+  <h4>버추얼 콘솔 (시뮬레이터)</h4>
+  <div class="state">상태 <b id="st">OFF</b> · 구간 <b id="seg">—</b> · 기어 <b id="gear">P</b></div>
+  <button class="cb" id="b_on" onclick="ignition(true)">① 시동 ON<small>세션 시작 · 목적지 '집' · 날씨 '비' · 구간 = 퇴근</small></button>
+  <div><select id="utt">
+    <option>오늘 팀장 때문에 진짜 힘들었다</option>
+    <option>내일 거래처 서류 다시 보내야 해, 아 노을 예쁘다</option>
+    <option>엄마한테 전화해야 되는데 아 근데 진짜 피곤하다 그리고 주말에 세차</option>
+    <option>그냥 아무 생각 없음 음 뭐지 뭐 이렇게 사는 게 맞나 싶기도 하고</option>
+    <option value="custom">직접 입력…</option>
+  </select><input id="utt_custom" placeholder="개떡같이 말해보기" style="display:none;margin-top:6px"></div>
+  <button class="cb" id="b_say" onclick="say()" disabled>② 말하기 (버튼 1탭 + STT)<small>저장 → "적어뒀어" → 백그라운드 구조화</small></button>
+  <label class="chk"><input type="checkbox" id="offline"> 오프라인 (LLM 실패 → 원문 보존)</label>
+  <button class="cb" id="b_stop" onclick="midStop()" disabled>③-a 기어 P (중간 정차, 편의점)<small>카드 없음 · 기록만 이어짐</small></button>
+  <button class="cb" id="b_arr" onclick="arrive()" disabled>③-b 목적지 도착 + 기어 P<small>'오늘의 나' 카드 + 15초 요약</small></button>
+  <button class="cb" id="b_off" onclick="ignition(false)" disabled>④ 시동 OFF<small>저장 완료 · 못 본 카드는 다음 시동 때</small></button>
+  <h4 style="margin-top:6px">로그</h4>
+  <div class="log" id="log"></div>
+</aside>
+</div>
+
+<script>
+/* ───────── 상태 ───────── */
+const COLOR={down:'#E05A6A',neutral:'#E0A24A',up:'#00AAD2'};
+const TYPE={thought:'생각',todo:'할 일',emotion:'감정',person:'사람',raw:'원문'};
+let S={state:'OFF',gear:'P',seg:null,session:null,utts:[],items:[],unseen:null,side:'right'};
+const $=id=>document.getElementById(id);
+function log(t){const d=document.createElement('div');d.innerHTML='<b>'+new Date().toTimeString().slice(0,8)+'</b> '+t;$('log').prepend(d)}
+function setState(s){S.state=s;$('st').textContent=s;$('gear').textContent=S.gear;$('seg').textContent=S.seg||'—';
+  $('b_on').disabled=s!=='OFF';$('b_say').disabled=s!=='SESSION_OPEN';$('b_stop').disabled=s!=='SESSION_OPEN';$('b_arr').disabled=s!=='SESSION_OPEN';$('b_off').disabled=(s==='OFF');
+  $('bigbtn').disabled=s!=='SESSION_OPEN'&&s!=='LISTENING';
+  $('status').innerHTML=s==='OFF'?'시동 OFF':(S.seg?'<b>'+S.seg+'</b> · 기록 중':'기록 중');}
+function tts(t){log('🔊 TTS "'+t+'" (화면 변화 없음)')}
+function editHint(){const h=document.createElement('div');h.className='summary on';h.textContent='항목을 탭하면 수정·삭제할 수 있어요. 원문은 그대로 남습니다.';$('items').prepend(h);setTimeout(()=>h.remove(),2000)}
+function go(id){document.querySelectorAll('.screen').forEach(x=>x.classList.remove('on'));$(id).classList.add('on')}
+
+/* 가짜 STT/TTS/LLM — 실제 앱에서는 SDK·API로 교체 */
+function fakeLLM(text){
+  if($('offline').checked) return [{text,type:'raw',emotion:'neutral'}];
+  const parts=text.replace(/\s+(그리고|근데|아 근데)\s+/g,'|').replace(/,\s*/g,'|').split('|').map(s=>s.trim()).filter(s=>s.length>1);
+  return parts.map(p=>{
+    let type='thought',emo='neutral';
+    if(/해야|보내|하기|해야지|전화|세차|사야|가야/.test(p)){type='todo';emo='neutral'}
+    else if(/힘들|짜증|피곤|싫|답답|울|불안|맞나/.test(p)){type='emotion';emo='down'}
+    else if(/예쁘|좋|행복|고마|시원|편하/.test(p)){type='emotion';emo='up'}
+    else if(/팀장|엄마|친구|거래처/.test(p)&&type!=='todo'){type='person'}
+    let t=p.replace(/^아\s+/,'').replace(/야 해$/,'기').replace(/해야 되는데$/,'하기').replace(/\s*예쁘다$/,'이 예뻤다').replace(/\s*좋다$/,'이 좋았다').replace(/^노을이 예뻤다/,'노을이 예뻤다');
+    if(type==='todo'&&!/기$/.test(t)) t=t.replace(/(해야지|해야 돼|해야 해)$/,'하기');
+    return {text:t,type,emotion:emo};
+  });
+}
+const CTX=[{at:'18:57',place:'올림픽대로',cong:true,km:8,x:.37,y:.72},{at:'19:08',place:'한강대교',cong:false,km:15,x:.58,y:.57},{at:'19:17',place:'반포대로',cong:false,km:19,x:.73,y:.45},{at:'19:24',place:'서초역',cong:false,km:21,x:.84,y:.36}];
+
+/* ───────── 콘솔 동작 ───────── */
+function ignition(on){
+  if(on){
+    if(S.unseen){ // 미열람 카드 먼저 (정차 상태)
+      log('미열람 카드 있음 → 정차 상태에서 먼저 표시 (F13)');S.session=S.unseen;S.utts=S.unseen.utts;S.items=S.unseen.items;S.unseen=null;renderCard();go('s1');setState('CARD');S.gear='P';$('gear').textContent='P';return;
+    }
+    S.session={date:'11월 6일 금요일',start:'18:40',dest:'집',weather:'비',min:0,km:0,cong:0};S.utts=[];S.items=[];S.seg='퇴근길';S.gear='D';
+    $('offcover').style.display='none';go('s0');setState('SESSION_OPEN');
+    log('세션 시작 · NaviHelper 목적지=집 · 날씨 API=비 · 구간 판단=퇴근(집 등록값 일치) · 화면 변화 없음');
+  }else{
+    if(S.state==='CARD'){log('카드 닫기 → 저장 완료 (cardSeen=true)');}
+    else if(S.state==='SESSION_OPEN'&&S.utts.length){S.unseen={...S.session,utts:S.utts,items:S.items};log('카드 미열람 상태로 시동 OFF → 다음 시동 때 먼저 표시');}
+    S.gear='P';S.seg=null;$('offcover').style.display='flex';go('s0');setState('OFF');$('summary').classList.remove('on');
+  }
+}
+$('utt').onchange=e=>{$('utt_custom').style.display=e.target.value==='custom'?'block':'none'};
+function say(){
+  if(S.state!=='SESSION_OPEN')return;
+  const text=$('utt').value==='custom'?($('utt_custom').value.trim()||'음 뭐였지'):$('utt').value;
+  setState('LISTENING');$('bigbtn').classList.add('listening');$('bigbtn').textContent='듣는 중';log('버튼 1탭 → SpeechToText 시작');
+  setTimeout(()=>{
+    if(S.state!=='LISTENING'){log('STT 취소(듣는 중에 상태가 바뀜) → 저장 없음');$('bigbtn').classList.remove('listening');$('bigbtn').textContent='말하기';return;}
+    const ctx=CTX[Math.min(S.utts.length,CTX.length-1)];
+    const u={id:S.utts.length+1,text,...ctx};S.utts.push(u);
+    $('bigbtn').classList.remove('listening');$('bigbtn').textContent='말하기';
+    tts('적어뒀어');
+    setState('SESSION_OPEN');
+    log('STT="'+text+'" → Room 저장(맥락: '+ctx.at+' · '+ctx.place+(ctx.cong?' · 정체':'')+' · '+ctx.km+'km) → TTS "적어뒀어"');
+    setTimeout(()=>{const items=fakeLLM(text).map((it,i)=>({...it,uid:u.id,id:S.items.length+i+1,orig:text}));S.items.push(...items);
+      log($('offline').checked?'LLM 실패(오프라인) → 원문 1개 보존, 다음 시동 때 재시도':'LLM 구조화 → 항목 '+items.length+'개 ('+items.map(x=>TYPE[x.type]).join(', ')+')');},900);
+  },1300);
+}
+function midStop(){S.gear='P';$('gear').textContent='P';log('기어 P (중간 정차, 목적지 아님) → 카드 없음, 기록만 이어짐');setTimeout(()=>{if(S.state!=='SESSION_OPEN')return;S.gear='D';$('gear').textContent='D';log('기어 D → 계속');},1500);}
+function arrive(){
+  S.gear='P';S.session.min=51;S.session.km=23;S.session.cong=23;setState('CARD');
+  log('목적지 도착 + 기어 P → 세션 종료값(51분·23km·정체 23분) → 카드 표시 → 15초 요약');
+  renderCard();go('s1');setTimeout(playSummary,500);
+}
+
+/* ───────── 카드 렌더 ───────── */
+function live(){return S.items.filter(i=>!i.deleted)}
+function renderCard(){
+  const s=S.session;$('c_date').textContent='오늘의 나 · '+s.date;$('c_title').textContent=(S.seg||'퇴근길')+' '+s.min+'분';
+  $('c_meta').textContent=s.start+' 회사 → 19:31 '+s.dest+' · '+s.weather+' · 올림픽대로 정체 '+s.cong+'분';
+  $('st_min').innerHTML=s.min+'<small>분</small>';$('st_km').innerHTML=s.km+'<small>km</small>';$('st_utt').textContent=S.utts.length;$('st_items').textContent=live().length;
+  const emos=live().map(i=>i.emotion);
+  $('flow').innerHTML=emos.length?emos.map(e=>'<div class="bar" style="background:'+COLOR[e]+'"></div>').join(''):'<div class="bar" style="background:rgba(255,255,255,.1)"></div>';
+  $('flowtxt').textContent=emos.map(e=>({down:'↓',neutral:'→',up:'↑'})[e]).join(' ');
+  $('pins').innerHTML=S.utts.map(u=>{const its=live().filter(i=>i.uid===u.id);if(!its.length)return '';const col=its.length>1?'linear-gradient(135deg,'+COLOR[its[0].emotion]+' 50%,'+COLOR[its[its.length-1].emotion]+' 50%)':COLOR[its[0].emotion];
+    return '<div class="pin" style="left:'+(u.x*100)+'%;top:'+(u.y*100)+'%"><div class="dot" style="background:'+col+'"></div><div class="lab">"'+u.text+'"<small>'+u.at+' · '+u.place+(u.cong?' · 정체':'')+(its.length>1?' · 한마디 1 → 항목 '+its.length:'')+'</small></div></div>'}).join('');
+  $('items').innerHTML=live().length?live().map(i=>{const u=S.utts.find(x=>x.id===i.uid);
+    return '<div class="item" onclick="openEdit('+i.id+')"><div class="c" style="background:'+COLOR[i.emotion]+'"></div><div><div class="txt">'+(i.edited||i.text)+'<span class="tag'+(i.type==='raw'?' raw':'')+'">'+TYPE[i.type]+'</span></div><div class="meta">'+u.at+' · '+u.place+(u.cong?' · 정체 '+S.session.cong+'분 구간':'')+((i.edited||i.text)!==i.orig?' · 원문 "'+i.orig+'"':'')+'</div></div></div>'}).join('')
+    :'<div style="color:var(--mut);font-size:13px;padding:10px">오늘은 말이 없었네. 그래도 여기까지 왔어.</div>';
+}
+/* 요약 */
+let sumTimer;
+function playSummary(){
+  const its=live();let txt;
+  if(!its.length)txt='오늘은 말이 없었네. 그래도 여기까지 왔어.';
+  else{const e=its.filter(i=>i.type==='emotion').map(i=>i.emotion);const todo=its.filter(i=>i.type==='todo').length;
+    txt=(e.length>=2?(e[0]==='down'&&e[e.length-1]==='up'?'힘들게 시작해서 '+(its.find(i=>i.emotion==='up')?.text.replace(/이 예뻤다|이 좋았다/,'')||'')+'로 끝났어.':'감정이 '+e.map(x=>({down:'가라앉았다',neutral:'그냥',up:'올라왔다'})[x]).join(', ')+'.'):(e.length===1?(e[0]==='down'?'오늘은 좀 힘들었네.':'오늘은 괜찮았네.'):'생각이 좀 있었네.'))+(todo?' 할 일 '+['','하나','둘','셋'][Math.min(todo,3)]+' 있어.':'');}
+  $('sum_txt').textContent='"'+txt+'"';$('summary').classList.add('on');$('sum_bar').style.transition='none';$('sum_bar').style.width='0';
+  setTimeout(()=>{$('sum_bar').style.transition='width 15s linear';$('sum_bar').style.width='100%'},50);
+  clearTimeout(sumTimer);sumTimer=setTimeout(()=>$('summary').classList.remove('on'),15200);log('요약은 로컬 규칙으로 조립(LLM 호출 없음) → TTS: '+txt);
+}
+function skipSummary(){clearTimeout(sumTimer);$('summary').classList.remove('on');log('요약 건너뛰기')}
+/* 편집 */
+let editId=null,editType=null;
+function openEdit(id){const i=S.items.find(x=>x.id===id);editId=id;editType=i.type;$('e_txt').value=i.edited||i.text;$('e_orig').textContent='원문: "'+i.orig+'"';
+  $('e_types').innerHTML=Object.keys(TYPE).filter(k=>k!=='raw').map(k=>'<button class="'+(k===editType?'sel':'')+'" onclick="pickType(\''+k+'\',this)">'+TYPE[k]+'</button>').join('');$('edit').classList.add('on')}
+function pickType(k,el){editType=k;[...el.parentNode.children].forEach(b=>b.classList.remove('sel'));el.classList.add('sel')}
+function saveEdit(){const i=S.items.find(x=>x.id===editId);const t=$('e_txt').value.trim();if(!t){log('빈 텍스트는 저장하지 않음');return;}i.edited=t;i.type=editType;if(i.type!=='emotion')i.emotion='neutral';closeEdit();renderCard();log('항목 수정 → 원문 보존, editedText·type 갱신'+(i.type!=='emotion'?' (비감정 유형 → neutral)':''))}
+function delItem(){S.items.find(x=>x.id===editId).deleted=true;closeEdit();renderCard();log('항목 삭제(soft delete)')}
+function closeEdit(){$('edit').classList.remove('on')}
+function openQR(){const txt=[$('c_title').textContent,$('c_meta').textContent,...live().map(i=>'- '+(i.edited||i.text)+' ['+TYPE[i.type]+']')].join('\n');const b=new TextEncoder().encode(txt).length;$('qr_bytes').textContent='평문 '+b+' bytes (1KB 초과 시 항목 텍스트만)';$('qrm').classList.add('on');log('QR 생성 · 카드 텍스트(평문) '+b+' bytes · 서버 없음')}
+/* 나의 지도 */
+const WEEK=[{d:'11월 6일 (금)',s:'퇴근길 · 51분 · 항목 3',f:['down','neutral','up']},{d:'11월 6일 (금)',s:'출근길 · 44분 · 항목 1',f:['neutral']},{d:'11월 5일 (목)',s:'퇴근길 · 58분 · 항목 2',f:['down','down']},{d:'11월 4일 (수)',s:'외출 · 23분 · 항목 0',f:[]},{d:'11월 3일 (화)',s:'퇴근길 · 49분 · 항목 4',f:['neutral','up','up','neutral']}];
+function renderWeek(sel=0){$('weeklist').innerHTML=WEEK.length?WEEK.map((w,i)=>'<div class="sess'+(i===sel?' sel':'')+'" onclick="renderWeek('+i+')"><div><div class="d">'+w.d+'</div><div class="s">'+w.s+'</div></div><div class="fl">'+(w.f.length?w.f.map(e=>'<i style="background:'+COLOR[e]+'"></i>').join(''):'<i style="background:rgba(255,255,255,.1)"></i>')+'</div></div>').join(''):'<div style="color:var(--mut);font-size:13px">기록 없음</div>';
+  $('mini').innerHTML=WEEK[sel]?'<svg viewBox="0 0 500 340" width="100%" height="100%"><defs><linearGradient id="g2" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#E05A6A"/><stop offset=".5" stop-color="#E0A24A"/><stop offset="1" stop-color="#00AAD2"/></linearGradient></defs><g stroke="#1A2740" stroke-width="2" fill="none"><path d="M0 240 L500 230"/><path d="M0 120 L500 130"/><path d="M120 0 L140 340"/><path d="M330 0 L310 340"/></g><path d="M50 280 C 150 240, 220 200, 280 180 S 380 120, 450 70" stroke="'+(WEEK[sel].f.length?'url(#g2)':'#2A3A5C')+'" stroke-width="6" fill="none" stroke-linecap="round"/></svg>':'';
+  $('mini_cap').textContent=WEEK[sel]?WEEK[sel].d+' · '+WEEK[sel].s:'기록 없음';}
+function btnSide(s,el){S.side=s;$('bigbtn').classList.toggle('left',s==='left');segSel(el);log('말하기 버튼 위치 = '+s)}
+function segSel(el){[...el.parentNode.children].forEach(b=>b.classList.remove('sel'));el.classList.add('sel')}
+function wipe(){if(confirm('모든 기록을 차량에서 삭제할까요? 되돌릴 수 없습니다.')){S.items=[];S.utts=[];S.unseen=null;WEEK.length=0;renderCard();renderWeek();log('전체 삭제 (이번 주 목록 포함)')}}
+/* 화면 스케일 */
+function fit(){const st=document.querySelector('.stage');const sc=Math.min((st.clientWidth-48)/1280,(st.clientHeight-48)/480);$('display').style.transform='scale('+sc+')'}
+addEventListener('resize',fit);fit();renderWeek();setState('OFF');
+log('프로토타입 준비. 콘솔의 ①→②→③-b 순서로 눌러보세요.');
+</script>
+</body>
+</html>

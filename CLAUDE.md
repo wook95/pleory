@@ -30,10 +30,28 @@ adb logcat -s PleosHello:I
 - AAR 이 `ai.pleos.playground.service.vehicle.VEHICLE_BINDING` 권한을 자동 merge 하고, 차량 서비스 최소 버전 2.3.13 을 요구한다.
 - `initialize()` 후 쓰고, `onDestroy()` 에서 `release()`.
 
+## 그 외 Pleos SDK (같은 저장소, 2026-11 확인)
+
+- `SpeechToText:3.3.1`, `TextToSpeech:3.3.1`, `NaviHelper:3.0.5`, `FusedLocation:1.1.3`, `LLM:2.1.3.1`.
+  에뮬레이터 서비스(caas 4.2.10, navi 3.0.4, vehicle 2.3.22)가 각 SDK 최소 버전을 만족한다.
+- STT/TTS/LLM 은 `pleos.car.permission.{STT,TTS,LLM}_SERVICE` 를 **직접 선언**해야 한다(자동 merge 안 됨, 없으면 SecurityException).
+- STT/TTS/LLM 의 SERVER·HYBRID 모드는 Pleos Playground My Project 의 Client ID/Secret 으로 `registerApp()` 필요. ON_DEVICE 는 불필요.
+- 자격증명은 `local.properties` 의 `pleos.clientId` / `pleos.clientSecret` → `BuildConfig.PLEOS_CLIENT_ID/SECRET`.
+- Pleos LLM SERVER: registerApp 은 되지만 generateContent 가 HTTP 400 — 프로젝트 토큰에 `/bsm/v1/runbsm` 권한 없음(게이트웨이 `e:cloud:gateway:00401`, 2026-11-08 확인). Playground 에서 LLM 권한을 받아야 한다. 공개 SDK 에는 UA 토큰 경로가 없다. 서비스가 contextMap(좌표 등)을 붙이는데 현재는 하드코딩 템플릿 값으로 보이며 앱에서 끌 수 없다.
+- 임시 LLM: Gemini `gemini-2.5-flash`. 키는 `local.properties` `llm.geminiKey` 또는 셸 `GEMINI_API_KEY`(→ `BuildConfig.GEMINI_API_KEY`). 셸 env 를 쓰려면 `zsh -ic './gradlew assembleDebug'` 처럼 env 가 있는 셸에서 빌드(데몬이 env 없이 떠 있으면 `./gradlew --stop`). 앱 내 확인: `adb shell am start -n ai.pleos.hello/.spike.GeminiSpikeActivity`.
+- STT `sendAudio()` 는 ON_DEVICE 전용 — SERVER 모드 시험은 실제 마이크로.
+- 에뮬레이터: on-device LLM 비활성. on-device STT·TTS 한국어 동작 — 로케일은 `Locale.KOREA`(`Locale.KOREAN` 은 unsupported).
+- TTS 는 `initialize(listener)` 성공 뒤에 `addEventListener` (먼저 부르면 lateinit 크래시).
+- Odometer 는 에뮬레이터에서 0.0, trip 거리는 ERROR_NOT_SUPPORTED_PROPERTY.
+- SDK 스파이크 화면: `adb shell am start -n ai.pleos.hello/.spike.SpikeActivity`, `adb logcat -s PleorySpike:I` (debug 전용).
+
 ## 권한
 
 - 차량 권한(예: `pleos.car.permission.CAR_DOORS`)은 매니페스트 선언만으로 설치 시 부여된다.
   `adb shell pm grant` 는 예외를 내지만 `dumpsys package ai.pleos.hello` 에서 `granted=true` 면 정상이다.
+- 이름 체계: `pleos.car.permission.{CAR_X, CONTROL_CAR_X, PRIVATE_CAR_X}` — 조회는 `CAR_`, 제어(set)는 `CONTROL_CAR_`.
+  X = CLIMATE, DOORS, DRIVE, ENERGY, INFO, LIGHTS, MIRRORS, SAFETY, SEATS, TOLL, WINDOWS.
+  어떤 API 가 어떤 권한을 쓰는지는 문서로 확인. 목록 자체는 AAR `classes.jar` 를 풀어 `grep -rhoa 'pleos\.car\.permission\.[A-Z_]*'`.
 
 ## 에뮬레이터
 
@@ -41,6 +59,10 @@ adb logcat -s PleosHello:I
   디바이스 `Pleos_Connect_v2_0`, 2560×1440, RAM 4GB, cold boot)
 - 실행: `emulator -avd Pleos_Connect_API_34` — 콜드 부팅 약 22초. 부팅 확인: `adb shell getprop sys.boot_completed` 가 `1`.
 - 앱 화면은 2560×1440 전체가 아니라 오른쪽 패널 **약 1682×1210** (x 853–2535, y 90–1300)에 뜬다. 왼쪽 차량 패널·하단 공조 바는 시스템 몫. 실측: logcat `HOME_SCREEN TaskViewContainer` 의 bounds.
+- 화면 밀도 160 (`adb shell wm density`) — 1dp = 1px 이라 앱 영역을 dp 그대로 설계하면 된다.
+- 기본 테마 `Theme.DeviceDefault` 는 앱 영역 상단에 타이틀 바(약 75px, 앱 이름 표시)를 넣는다. 전체 화면이 필요하면 `NoActionBar` 계열 테마를 쓴다.
+- 앱은 **user 10** 으로 돈다. 앱 내부 파일에 넣을 땐 `adb shell run-as ai.pleos.hello --user 10 ...`.
+- 기어 등 VHAL 값은 adb 로 못 바꾼다(`inject-vhal-event` 는 user 빌드라 거부) — Virtual Console 로 조작.
 - 스크린샷은 `am start -W` 로 실행 완료를 기다린 뒤 찍는다 — 실행이 3초 넘게 걸려 고정 sleep 이면 빈 화면이 찍힌다.
 - SDK 업데이트 사이트(Mac arm64): `https://nexus-playground.pleos.ai/repository/raw-releases/connect-avd/2.x/crp-arm64-sys-img.xml`
   (`~/.android/repositories.cfg` 에 등록됨. Windows/Linux 는 `crp-sys-img.xml`)
