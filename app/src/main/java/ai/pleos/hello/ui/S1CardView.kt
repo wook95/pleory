@@ -68,7 +68,7 @@ class S1CardView(
     private val history = context.button("지난 기록", BtnKind.TEXT, padH = 28) { onHistory() }
     private val settings = context.button("설정", BtnKind.TEXT, padH = 28) { onSettings() }
 
-    /** 지난 기록에서 연 카드일 때만 보이는 되돌아가기. 그때는 요약·폰·설정 버튼을 숨긴다(요약은 지금 세션 것이라). */
+    /** 지난 기록에서 연 카드일 때만 보이는 되돌아가기. 그때는 요약·지난 기록·설정 버튼을 숨긴다(요약은 지금 세션 것이라). "폰에서 열기"는 카드마다라 남긴다. */
     private var onBrowseBack: (() -> Unit)? = null
     private val back = context.button("지난 기록으로", BtnKind.SECONDARY, BackGlyph(context, Tok.FG)) { onBrowseBack?.invoke() }
         .apply { visibility = GONE }
@@ -184,14 +184,14 @@ class S1CardView(
     }
 
     /**
-     * 지난 기록(S2)에서 연 카드면 [onBack] 을 준다 — 아래 줄이 "지난 기록으로" 하나가 되고 요약 자막도 뜨지 않는다.
+     * 지난 기록(S2)에서 연 카드면 [onBack] 을 준다 — 아래 줄이 "지난 기록으로"·"폰에서 열기" 가 되고 요약 자막도 뜨지 않는다.
      * null 이면 평소 카드(도착·Gleo)로 돌아간다.
      */
     fun setBrowsing(onBack: (() -> Unit)?) {
         onBrowseBack = onBack
         val browsing = onBack != null
         back.visibility = if (browsing) VISIBLE else GONE
-        listOf(primary, qr, history, settings).forEach { it.visibility = if (browsing) GONE else VISIBLE }
+        listOf(primary, history, settings).forEach { it.visibility = if (browsing) GONE else VISIBLE }
         if (browsing) summaryBlock.visibility = GONE
     }
 

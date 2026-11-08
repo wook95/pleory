@@ -90,6 +90,9 @@ dependencies {
     // Gemini 스파이크 전용(debug). 플랫폼 LLM 이 열리면 재검토
     debugImplementation("ai.pleos.playground:LLM:2.1.3.1")
 
+    // QR(F10). core 만 쓴다(순수 Java) — 비트 매트릭스를 직접 그린다. 테스트의 디코드 왕복도 같은 라이브러리
+    implementation("com.google.zxing:core:3.5.3")
+
     testImplementation("junit:junit:4.13.2")
     // 마이그레이션·리마인드 조회 SQL 을 JVM 에서 실제 SQLite 로 돌린다(ReminderSqlTest)
     testImplementation("org.xerial:sqlite-jdbc:3.41.2.2")

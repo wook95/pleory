@@ -12,13 +12,17 @@ import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
 
-/** 카드의 항목 한 줄. 시각·장소는 [CardUtterance] 에 있다. [id] 는 DB Item id — 구조화 전 원문 한 줄은 아직 행이 없어 null(지울 수 없음). */
+/**
+ * 카드의 항목 한 줄. 시각·장소는 [CardUtterance] 에 있다. [id] 는 DB Item id — 구조화 전 원문 한 줄은 아직 행이 없어 null(지울 수 없음).
+ * [done] 은 리마인드 띠의 "했어"(F15)로 끝낸 할 일.
+ */
 data class CardItem(
     val id: Long?,
     val text: String,
     val type: ItemType,
     val emotion: Emotion,
     val keywords: List<String>,
+    val done: Boolean = false,
 )
 
 /** 한마디 한 건과 거기서 나온 항목들. [quote] 는 STT 원문. */
@@ -34,6 +38,7 @@ data class CardUtterance(
 /**
  * S1 카드 표시용 값 전부. 순수 데이터라 JVM 테스트로 검증한다.
  * [sentence] 는 통계를 타일 대신 문장으로 쓴 두 줄(시안 r2 A "일지"). [startLabel]·[endLabel] 은 경로 끝점 라벨.
+ * [heading] 은 "11월 8일 퇴근길 18:40–19:31", [summary] 는 저장된 요약 문장(아직 없으면 null) — 둘 다 QR 평문(F10)용.
  */
 data class CardModel(
     val date: String,
@@ -45,6 +50,8 @@ data class CardModel(
     val route: List<GeoPoint>,
     val startLabel: String = "",
     val endLabel: String = "",
+    val heading: String = "",
+    val summary: String? = null,
 ) {
     val items: List<CardItem> get() = utterances.flatMap { it.items }
 }
@@ -76,6 +83,10 @@ object CardFormat {
 
     fun date(millis: Long, tz: TimeZone = TimeZone.getDefault()): String = format("M월 d일 EEEE", millis, tz)
 
+    /** "18:40–19:31". 끝이 시작보다 이르면(데모 시계로 끝난 세션) 시작 시각만 쓴다. */
+    fun timeRange(startedAt: Long, endedAt: Long, tz: TimeZone = TimeZone.getDefault()): String =
+        if (endedAt <= startedAt) time(startedAt, tz) else "${time(startedAt, tz)}–${time(endedAt, tz)}"
+
     /** 한마디 하나의 핀 색(감정) — 항목 1개면 그 색, 2개 이상이면 첫 항목과 마지막 항목의 대각 분할(PRD §3). */
     fun pinEmotions(items: List<CardItem>): List<Emotion> = when {
         items.isEmpty() -> emptyList()
@@ -83,7 +94,7 @@ object CardFormat {
         else -> listOf(items.first().emotion, items.last().emotion)
     }
 
-    private fun format(pattern: String, millis: Long, tz: TimeZone) =
+    internal fun format(pattern: String, millis: Long, tz: TimeZone) =
         SimpleDateFormat(pattern, Locale.KOREA).apply { timeZone = tz }.format(Date(millis))
 }
 
@@ -111,6 +122,8 @@ object CardModelBuilder {
             route = track.sortedBy { it.at }.map { GeoPoint(it.lat, it.lng) },
             startLabel = leg(session.startedAt, session.originLabel),
             endLabel = leg(endedAt, session.destLabel),
+            heading = "${CardFormat.format("M월 d일", session.startedAt, tz)} ${CardFormat.segmentName(session.segment)} ${CardFormat.timeRange(session.startedAt, endedAt, tz)}",
+            summary = session.summaryText?.takeIf { it.isNotBlank() },
         )
     }
 
@@ -119,7 +132,7 @@ object CardModelBuilder {
         val cardItems = if (items.isEmpty()) {
             listOf(CardItem(null, u.text, ItemType.RAW, Emotion.NEUTRAL, emptyList()))
         } else {
-            items.filter { !it.deleted }.sortedBy { it.order }.map { CardItem(it.id, it.editedText ?: it.text, it.type, it.emotion, it.keywords) }
+            items.filter { !it.deleted }.sortedBy { it.order }.map { CardItem(it.id, it.editedText ?: it.text, it.type, it.emotion, it.keywords, it.done) }
         }
         val point = if (u.lat != null && u.lng != null) GeoPoint(u.lat, u.lng) else null
         return CardUtterance(time, u.placeLabel, u.congested, u.text, cardItems, point)

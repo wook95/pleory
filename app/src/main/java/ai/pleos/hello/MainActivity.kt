@@ -1,7 +1,9 @@
 package ai.pleos.hello
 
 import ai.pleos.hello.core.CardFormat
+import ai.pleos.hello.core.CardModel
 import ai.pleos.hello.core.ConsentState
+import ai.pleos.hello.core.QrPayload
 import ai.pleos.hello.core.Screen
 import ai.pleos.hello.core.ScreenGate
 import ai.pleos.hello.core.SessionEvent
@@ -10,6 +12,7 @@ import ai.pleos.hello.data.RoomPleoryStore
 import ai.pleos.hello.gleo.GleoActionReceiver
 import ai.pleos.hello.platform.Gear
 import ai.pleos.hello.ui.ConsentView
+import ai.pleos.hello.ui.QrView
 import ai.pleos.hello.ui.S0DriveView
 import ai.pleos.hello.ui.S1CardView
 import ai.pleos.hello.ui.S2HistoryView
@@ -41,6 +44,13 @@ class MainActivity : Activity() {
     private lateinit var consentView: ConsentView
     private lateinit var settingsView: SettingsView
     private lateinit var historyView: S2HistoryView
+    private lateinit var qrView: QrView
+
+    /** 지금 카드에 보이는 내용(QR 평문의 원본). 카드를 다시 읽을 때마다 바뀐다. */
+    private var cardModel: CardModel? = null
+
+    /** "폰에서 열기" QR 모달(F10). 카드 위에만 뜨고, 게이트가 닫히거나 카드가 내려가면 닫는다. */
+    private var qrOpen = false
     private val historyStore by lazy { RoomPleoryStore(app.db) }
     private var historyLoad: Job? = null
     private val uiScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
@@ -84,7 +94,7 @@ class MainActivity : Activity() {
             this,
             onReplay = { app.controller.replaySummary() },
             onSkip = { app.controller.skipSummary() },
-            onQr = { Log.i(PleoryApp.FLOW_TAG, "tap 폰에서 열기 (P1)") },
+            onQr = ::openQr,
             onSettings = ::openSettings,
             // 카드는 주차·제한 없음일 때만 보이지만(ScreenGate), 탭과 기어 변경이 엇갈려도 주행 중에는 지우지 않는다
             onDeleteItem = { id -> if (app.gateAllowed()) app.controller.deleteItem(id) },
@@ -97,6 +107,7 @@ class MainActivity : Activity() {
             onOpen = ::openHistoryCard,
             onFilter = { historyTodoOnly = it; loadHistory() },
         ).apply { visibility = View.GONE }
+        qrView = QrView(this, onClose = ::closeQr).apply { visibility = View.GONE }
         // 동의는 두 버튼만 인정한다. 뒤로 가기·자동 수락은 동의로 치지 않는다.
         consentView = ConsentView(this, onAgree = { answer { it.grant(app.clock.nowMillis()) }; app.warmLlm() }, onDecline = { answer { it.decline(app.clock.nowMillis()) } })
             .apply { visibility = View.GONE }
@@ -111,6 +122,7 @@ class MainActivity : Activity() {
             addView(view)
             addView(card)
             addView(historyView)
+            addView(qrView)
             addView(settingsView)
             addView(consentView)
         })
@@ -195,6 +207,9 @@ class MainActivity : Activity() {
         historyView.visibility = if (screen == Screen.HISTORY && browsing == null) View.VISIBLE else View.GONE
         consentView.visibility = if (screen == Screen.CONSENT) View.VISIBLE else View.GONE
         settingsView.visibility = if (screen == Screen.SETTINGS) View.VISIBLE else View.GONE
+        // QR 은 보이는 카드 위에서만. 주행이 시작되거나(게이트) 카드가 바뀌거나 내려가면 닫는다
+        if (qrOpen && (cardNow == null || cardNow != shownCard)) closeQrSilently("gate=$allowed screen=$screen")
+        qrView.visibility = if (qrOpen) View.VISIBLE else View.GONE
         view.setListening(state == SessionState.LISTENING)
         view.setSegmentName(CardFormat.segmentName(app.sessionSegment))
         view.setSettingsVisible(allowed)
@@ -206,6 +221,28 @@ class MainActivity : Activity() {
         }
         shownCard = cardNow
         cardShown = cardNow != null
+    }
+
+    /** S1 의 "폰에서 열기". 주차·제한 없음이고 카드 내용을 읽은 뒤에만 연다. */
+    private fun openQr() {
+        val m = cardModel
+        if (!app.gateAllowed() || m == null || !cardShown) return
+        val p = QrPayload.build(m)
+        Log.i(PleoryApp.FLOW_TAG, "qr open bytes=${p.bytes} items=${p.items} truncated=${p.truncated} dropped=${p.dropped}")
+        qrView.setPayload(p)
+        qrOpen = true
+        render(lastState)
+    }
+
+    private fun closeQr() {
+        qrOpen = false
+        Log.i(PleoryApp.FLOW_TAG, "qr close")
+        render(lastState)
+    }
+
+    private fun closeQrSilently(reason: String) {
+        qrOpen = false
+        Log.i(PleoryApp.FLOW_TAG, "qr close auto $reason")
     }
 
     private fun answer(record: (ai.pleos.hello.data.ConsentPrefs) -> Unit) {
@@ -271,6 +308,7 @@ class MainActivity : Activity() {
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
         when {
+            qrOpen -> closeQr()
             settingsOpen -> closeSettings()
             historySession != null -> closeHistoryCard()
             historyOpen -> closeHistory()
@@ -282,6 +320,7 @@ class MainActivity : Activity() {
     /** 카드 내용을 DB 에서 다시 읽는다. 종료값 저장이 끝난 뒤에 읽는다(컨트롤러가 보장). */
     private fun loadCard() {
         cardLoad?.cancel()
+        cardModel = null // 읽는 동안 QR 이 지난 카드 내용을 담지 않게
         val requested = cardRequested && lastState != SessionState.CARD
         val past = historySession
         cardLoad = uiScope.launch {
@@ -292,6 +331,7 @@ class MainActivity : Activity() {
             }
             // 리마인드 띠(F15)는 도착 카드에만. Gleo 나 지난 기록으로 연 카드에는 붙이지 않는다
             card.setReminders(if (requested || past != null) emptyList() else app.controller.loadReminders(), app.clock.nowMillis())
+            cardModel = m
             if (m != null) card.setModel(m) else card.clearModel() // 전체 삭제 뒤에는 세션 행이 없다
         }
     }
