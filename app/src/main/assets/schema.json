@@ -1,0 +1,26 @@
+{
+  "packageName": "ai.pleos.hello",
+  "appDescription": "A drive journal that saves spoken notes together with the current drive context.",
+  "invokeWord": "플레오리",
+  "version": "1.0.0",
+  "actionCalls": [
+    {
+      "type": "function",
+      "function": {
+        "name": "ADD_DRIVE_NOTE",
+        "description": "Save a spoken note to the drive journal.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "note": {
+              "type": "string",
+              "description": "The content of the note to save."
+            }
+          },
+          "required": ["note"]
+        },
+        "component": "service"
+      }
+    }
+  ]
+}

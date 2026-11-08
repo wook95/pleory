@@ -8,6 +8,8 @@ sealed interface SessionEvent {
     data class GearChanged(val gear: Gear) : SessionEvent
     data object TalkTapped : SessionEvent
     data class SttFinal(val text: String, val round: Int) : SessionEvent
+    /** 외부(Gleo 음성 액션)가 넘긴 메모. STT 없이 SttFinal 과 같은 저장 경로를 탄다. */
+    data class ExternalNote(val text: String) : SessionEvent
     data class SttFailed(val round: Int) : SessionEvent
     data class SttTimeout(val round: Int) : SessionEvent
     data class DestinationChanged(val state: DestinationState) : SessionEvent
@@ -83,6 +85,7 @@ class SessionStateMachine {
             is SessionEvent.GearChanged -> onGear(event.gear, out)
             SessionEvent.TalkTapped -> onTalk(out)
             is SessionEvent.SttFinal -> onSttFinal(event, out)
+            is SessionEvent.ExternalNote -> onExternalNote(event.text, out)
             is SessionEvent.SttFailed -> if (isActive(event.round)) endListening()
             is SessionEvent.SttTimeout -> if (isActive(event.round)) {
                 out += SessionCommand.CancelStt(event.round)
@@ -154,6 +157,15 @@ class SessionStateMachine {
         val id = ++utteranceCounter
         out += SessionCommand.SaveUtterance(id, e.text, e.round)
         out += SessionCommand.Say("적어뒀어")
+        startStructure(id, out)
+    }
+
+    /** 세션이 열려 있을 때만 받는다. 듣는 중에는 TTS 가 마이크에 섞이지 않게 "적어뒀어"를 생략한다. */
+    private fun onExternalNote(text: String, out: MutableList<SessionCommand>) {
+        if (state == SessionState.OFF || state == SessionState.CLOSED || text.isBlank()) return
+        val id = ++utteranceCounter
+        out += SessionCommand.SaveUtterance(id, text, 0)
+        if (state != SessionState.LISTENING) out += SessionCommand.Say("적어뒀어")
         startStructure(id, out)
     }
 

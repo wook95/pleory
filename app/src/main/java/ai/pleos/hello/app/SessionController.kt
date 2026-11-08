@@ -127,6 +127,9 @@ class SessionController(
         }
     }
 
+    /** Gleo 음성 액션으로 받은 메모를 STT 최종 결과와 같은 경로로 저장한다. */
+    fun addNoteFromVoice(text: String) = post(SessionEvent.ExternalNote(text))
+
     /** 이전에 PENDING 으로 남은 발화를 다시 구조화한다(다음 시동, D12). */
     fun reprocessPending() {
         scope.launch {

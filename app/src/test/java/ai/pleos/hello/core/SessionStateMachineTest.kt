@@ -45,6 +45,27 @@ class SessionStateMachineTest {
         assertEquals(SessionState.SESSION_OPEN, m.state)
     }
 
+    @Test fun 외부_메모는_STT_없이_저장_적어뒀어_구조화() {
+        open()
+        val c = send(ExternalNote("우유 사기"))
+        assertEquals(listOf(SaveUtterance(1, "우유 사기", 0), Say("적어뒀어"), StartStructure(1, 1)), c)
+        assertEquals(SessionState.SESSION_OPEN, m.state)
+    }
+
+    @Test fun 외부_메모는_듣는_중이면_말하지_않고_듣기를_유지() {
+        open()
+        startListening()
+        val c = send(ExternalNote("우유 사기"))
+        assertEquals(listOf(SaveUtterance(1, "우유 사기", 0), StartStructure(1, 1)), c)
+        assertEquals(SessionState.LISTENING, m.state)
+    }
+
+    @Test fun 외부_메모는_세션이_없거나_빈_문자열이면_무시() {
+        assertTrue(send(ExternalNote("메모")).isEmpty())
+        open()
+        assertTrue(send(ExternalNote("  ")).isEmpty())
+    }
+
     // --- §2-4 빠뜨리기 쉬운 전이
 
     @Test fun LISTENING_중_시동_OFF는_취소하고_저장_없음() {

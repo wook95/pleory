@@ -10,7 +10,6 @@
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="pleos.car.permission.CAR_DRIVE" />
-    <uses-permission android:name="pleos.car.permission.CAR_INFO" />
     <uses-permission android:name="pleos.car.permission.NAVI_ROUTE" />
     <uses-permission android:name="pleos.car.permission.STT_SERVICE" />
     <uses-permission android:name="pleos.car.permission.TTS_SERVICE" />
@@ -32,5 +31,14 @@
                 android:name="distractionOptimized"
                 android:value="true" />
         </activity>
+
+        <!-- Gleo AI 음성 액션. 보내는 쪽이 쥐는 보호 권한이 문서에 없어 exported 로 연다. -->
+        <receiver
+            android:name=".gleo.GleoActionReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="ADD_DRIVE_NOTE" />
+            </intent-filter>
+        </receiver>
     </application>
 </manifest>
