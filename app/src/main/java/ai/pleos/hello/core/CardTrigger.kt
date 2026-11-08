@@ -12,6 +12,7 @@ enum class Gear { P, R, N, D }
 /**
  * 카드 표시 조건(TRD D9): 기어 P AND (내비 도착 OR 알려진 목적지 300m 이내 OR 목적지 없음 확정 + P 5초).
  * 목적지 변경이나 기어 P 이탈 때 도착 관련 플래그를 초기화한다. 목적지 미확인은 5초 규칙으로 발동하지 않는다.
+ * 세션에서 한 번도 주행(D)하지 않았으면 발동하지 않는다 — 주차 상태로 앱을 켜자마자 빈 카드가 뜨는 것을 막는다.
  */
 class CardTrigger {
     private var gear: Gear = Gear.D
@@ -19,9 +20,11 @@ class CardTrigger {
     private var arrived = false
     private var nearDestination = false
     private var parkHeld5s = false
+    private var droveThisSession = false
 
     fun onGear(g: Gear) {
         gear = g
+        if (g == Gear.D) droveThisSession = true
         if (g != Gear.P) clearFlags() else parkHeld5s = false
     }
 
@@ -37,14 +40,17 @@ class CardTrigger {
     /** P 상태가 5초 지속됐다는 통지. P가 아니면 무시. */
     fun onParkHeld5s() { if (gear == Gear.P) parkHeld5s = true }
 
-    fun fired(): Boolean = gear == Gear.P && (
+    fun fired(): Boolean = gear == Gear.P && droveThisSession && (
         arrived ||
             (nearDestination && destination == DestinationState.Known) ||
             (parkHeld5s && destination == DestinationState.None)
         )
 
-    /** 새 세션 시작 시. 기어와 목적지는 현재 값을 유지하고 도착 플래그만 비운다. */
-    fun resetFlags() = clearFlags()
+    /** 새 세션 시작 시. 기어와 목적지는 현재 값을 유지하고 도착 플래그와 주행 여부를 비운다. */
+    fun resetFlags() {
+        clearFlags()
+        droveThisSession = gear == Gear.D
+    }
 
     private fun clearFlags() {
         arrived = false

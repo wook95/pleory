@@ -5,9 +5,24 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class CardTriggerTest {
+    /** 세션에서 한 번 주행(D)한 뒤 [gear] 로 바꾼 상태. */
     private fun trigger(dest: DestinationState, gear: Gear = Gear.P) = CardTrigger().apply {
         onDestination(dest)
+        onGear(Gear.D)
         onGear(gear)
+    }
+
+    @Test fun 주행_전_주차_상태에서는_P_5초여도_발동하지_않음() {
+        val t = CardTrigger().apply { onDestination(DestinationState.None); onGear(Gear.P) }
+        t.onParkHeld5s()
+        assertFalse(t.fired())
+    }
+
+    @Test fun 새_세션은_주행_여부를_다시_요구() {
+        val t = trigger(DestinationState.None)
+        t.resetFlags()
+        t.onParkHeld5s()
+        assertFalse(t.fired())
     }
 
     @Test fun 내비_도착_알림은_P에서_발동() {
