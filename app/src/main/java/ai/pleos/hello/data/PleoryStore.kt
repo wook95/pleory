@@ -1,5 +1,6 @@
 package ai.pleos.hello.data
 
+import ai.pleos.hello.BuildConfig
 import ai.pleos.hello.core.CardModel
 import ai.pleos.hello.core.CardModelBuilder
 import ai.pleos.hello.core.SessionEnd
@@ -85,9 +86,11 @@ class RoomPleoryStore(private val db: PleoryDb) : PleoryStore {
 
     override suspend fun deleteAll(): Unit = withContext(Dispatchers.IO) {
         db.clearAllTables()
-        val counts = listOf("session", "utterance", "item", "track_point", "place").joinToString(" ") { t ->
-            db.query("SELECT COUNT(*) FROM $t", null).use { c -> c.moveToFirst(); "$t=${c.getInt(0)}" }
+        if (BuildConfig.DEBUG) {
+            val counts = listOf("session", "utterance", "item", "track_point", "place").joinToString(" ") { t ->
+                db.query("SELECT COUNT(*) FROM $t", null).use { c -> c.moveToFirst(); "$t=${c.getInt(0)}" }
+            }
+            Log.i("PleoryFlow", "deleteAll rows: $counts")
         }
-        Log.i("PleoryFlow", "deleteAll rows: $counts")
     }
 }

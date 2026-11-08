@@ -212,7 +212,7 @@ class PleosSpeechOutput(context: Context, private val post: Post) : SpeechOutput
             .setOnAudioFocusChangeListener({ change -> post { onFocusChange(change) } }, Handler(Looper.getMainLooper()))
             .build()
         if (FocusPolicy.onRequestResult(audioManager.requestAudioFocus(request)) == FocusPolicy.Action.SKIP) {
-            Log.w(TAG, "tts focus denied, skip '$text'")
+            Log.w(TAG, "tts focus denied, skip len=${text.length}") // 요약에 발화 내용이 있어 본문은 남기지 않는다
             post { onDone?.invoke() }
             return
         }
