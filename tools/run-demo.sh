@@ -187,8 +187,7 @@ case "$STEP" in
     wait_tap todo-only
     wait_log 'history rows=[0-9]+ todoOnly=true' 1 10
     sleep 0.5; shot d1-09-todo-only
-    sleep 3
-    sleep 2
+    sleep 5
     stop_rec
     demo --es cmd ignition-off
     wait_log 'event IgnitionOff' 2 10 # 1번째는 시나리오가 새 세션을 열 때

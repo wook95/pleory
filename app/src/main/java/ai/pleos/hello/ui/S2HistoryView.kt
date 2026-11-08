@@ -14,7 +14,6 @@ import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import android.view.ViewGroup.LayoutParams.WRAP_CONTENT
-import android.widget.LinearLayout
 import android.widget.ScrollView
 
 /**
@@ -34,8 +33,7 @@ class S2HistoryView(
 
     init { render() }
 
-    /** [rows] 가 null 이면 읽는 중(목록 자리를 비워 둔다). */
-    fun setRows(rows: List<HistoryRow>?, todoOnly: Boolean) {
+    fun setRows(rows: List<HistoryRow>, todoOnly: Boolean) {
         this.rows = rows
         this.todoOnly = todoOnly
         render()

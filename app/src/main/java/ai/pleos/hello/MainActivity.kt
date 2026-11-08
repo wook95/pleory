@@ -2,7 +2,6 @@ package ai.pleos.hello
 
 import ai.pleos.hello.core.CardFormat
 import ai.pleos.hello.core.CardModel
-import ai.pleos.hello.core.ConsentState
 import ai.pleos.hello.core.QrPayload
 import ai.pleos.hello.core.Screen
 import ai.pleos.hello.core.ScreenGate

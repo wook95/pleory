@@ -46,8 +46,6 @@ class S1CardView(
 
     /** 도착 리마인드 띠(F15). 글 맨 위에 붙고, 비면 숨는다. [setReminders] 로 채운다. */
     private val reminderStrip = context.col().apply { visibility = GONE }
-    private var reminders: List<ReminderCandidate> = emptyList()
-    private var remindersNow = 0L
 
     private val page = context.col()
     private val route = RouteView(context)
@@ -200,8 +198,6 @@ class S1CardView(
      * [nowMillis] 는 "어제 퇴근길" 같은 상대 날짜를 셀 기준 시각.
      */
     fun setReminders(list: List<ReminderCandidate>, nowMillis: Long) {
-        reminders = list
-        remindersNow = nowMillis
         val c = context
         reminderStrip.removeAllViews()
         reminderStrip.visibility = if (list.isEmpty()) GONE else VISIBLE
@@ -217,7 +213,7 @@ class S1CardView(
                 }, lp(0, WRAP_CONTENT, 1f))
                 addView(c.button("했어", BtnKind.SECONDARY, padH = 28) {
                     onReminderDone(r.itemId)
-                    setReminders(reminders.filter { it.itemId != r.itemId }, remindersNow)
+                    setReminders(list.filter { it.itemId != r.itemId }, nowMillis)
                 }.apply { contentDescription = "‘${ArrivalReminder.itemText(r.text)}’ 했어" }, lp(WRAP_CONTENT).m(l = c.dp(16)))
             }, lp().m(t = c.dp(12)))
         }

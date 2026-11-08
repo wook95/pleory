@@ -55,7 +55,7 @@ object History {
     }
 
     /** 카드 모델 → 행. 날짜는 오늘·어제·그 외 "11월 5일 목요일". */
-    fun row(session: Session, card: CardModel, nowMillis: Long, tz: TimeZone = TimeZone.getDefault()): HistoryRow {
+    private fun row(session: Session, card: CardModel, nowMillis: Long, tz: TimeZone = TimeZone.getDefault()): HistoryRow {
         val endedAt = session.endedAt ?: session.startedAt
         val today = startOfDay(nowMillis, tz)
         val day = when (startOfDay(session.startedAt, tz)) {

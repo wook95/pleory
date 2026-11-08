@@ -97,7 +97,6 @@ class DebugPanelActivity : Activity() {
 
     /** Room 쿼리는 메인 스레드에서 못 돌리므로 IO 에서. */
     private fun seedHistory(set: String = "test", onDone: () -> Unit = {}) {
-        val app = app
         CoroutineScope(Dispatchers.IO).launch {
             runCatching { HistorySeed.seed(app, set) }.onFailure { Log.e(TAG, "history seed failed", it) }
             runOnUiThread(onDone)
