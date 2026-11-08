@@ -53,3 +53,18 @@ class RuleStructurer : Structurer {
         val PERSON_RE = Regex("팀장|엄마|친구|거래처")
     }
 }
+
+/**
+ * 구조화가 성공하지 못한 사유를 로그용 분류 한 줄로 만든다(성공이면 null). 본문·발화는 담지 않는다.
+ * [result] null = 컨트롤러 타임아웃. 계약 위반 사유는 모델 값이 섞일 수 있어 분류만 남긴다.
+ */
+object StructureFailure {
+    fun reason(result: StructurerResult?, parsed: StructureResult?): String? = when {
+        result == null -> "timeout"
+        result is StructurerResult.NetworkUnavailable -> "network unavailable"
+        result is StructurerResult.Error -> result.message
+        parsed is StructureResult.Failed -> "contract violation"
+        else -> null
+    }
+}
+

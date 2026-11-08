@@ -27,6 +27,7 @@ import java.net.UnknownHostException
  * - 코루틴이 취소되면(컨트롤러 8초 타임아웃 포함) 연결을 닫아 블로킹 읽기를 즉시 끊는다.
  * - 5xx/429 는 [budgetMs] 안에서 1회만 재시도한다.
  * - DNS/연결 실패 = [StructurerResult.NetworkUnavailable], 그 외 = [StructurerResult.Error].
+ * - Error 메시지는 로그용 사유 분류만 담는다("gemini http 429" 등). 요청·응답 본문, 발화, 키는 넣지 않는다.
  */
 class GeminiStructurer(
     private val apiKey: String = BuildConfig.GEMINI_API_KEY,
@@ -64,7 +65,7 @@ class GeminiStructurer(
 
     @OptIn(InternalCoroutinesApi::class)
     private suspend fun callOnce(text: String, timeoutMs: Int): Attempt {
-        if (timeoutMs <= 0) return Attempt.Fail("timeout")
+        if (timeoutMs <= 0) return Attempt.Fail("gemini timeout")
         val conn = (URL("$ENDPOINT/$MODEL:generateContent").openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"
             connectTimeout = timeoutMs
@@ -79,17 +80,17 @@ class GeminiStructurer(
             val code = conn.responseCode
             when {
                 code == 200 -> parseText(conn.inputStream.bufferedReader().readText())
-                code == 429 || code >= 500 -> Attempt.Retryable("HTTP $code")
-                else -> Attempt.Fail("HTTP $code")
+                code == 429 || code >= 500 -> Attempt.Retryable("gemini http $code")
+                else -> Attempt.Fail("gemini http $code")
             }
         } catch (e: UnknownHostException) {
             Attempt.Offline
         } catch (e: ConnectException) {
             Attempt.Offline
         } catch (e: SocketTimeoutException) {
-            Attempt.Fail("timeout")
+            Attempt.Fail("gemini timeout")
         } catch (e: IOException) {
-            Attempt.Fail(e.javaClass.simpleName)
+            Attempt.Fail("gemini network error ${e.javaClass.simpleName}")
         } finally {
             handle.dispose()
             conn.disconnect()
@@ -102,7 +103,7 @@ class GeminiStructurer(
                 .getJSONArray("parts").getJSONObject(0).getString("text"),
         )
     } catch (e: org.json.JSONException) {
-        Attempt.Fail("응답 형식 불량")
+        Attempt.Fail("gemini response parse failure")
     }
 
     private fun requestBody(text: String): String = JSONObject()

@@ -8,6 +8,7 @@ import ai.pleos.hello.core.SessionState
 import ai.pleos.hello.core.SessionEndCalc
 import ai.pleos.hello.core.SessionStateMachine
 import ai.pleos.hello.core.StructureContract
+import ai.pleos.hello.core.StructureFailure
 import ai.pleos.hello.core.StructureResult
 import ai.pleos.hello.core.StructuredItem
 import ai.pleos.hello.core.Structurer
@@ -349,6 +350,7 @@ class SessionController(
                     val result = withTimeoutOrNull(structureTimeoutMs) { structurer.structure(entry.text) }
                     val parsed = (result as? StructurerResult.Ok)?.let { StructureContract.parse(it.rawJsonText) }
                     if (parsed is StructureResult.Ok && entry.generation == c.generation) entry.items = parsed.items
+                    StructureFailure.reason(result, parsed)?.let { trace("llm failed: $it") }
                     post(
                         when {
                             result == null -> SessionEvent.LlmFailed(c.utteranceId, c.generation)
