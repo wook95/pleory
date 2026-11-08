@@ -7,8 +7,9 @@ object ConsentPolicy {
     /**
      * 고지 내용이 바뀌면 올린다. 저장된 버전이 다르면 동의가 없는 것으로 보고 다시 묻는다.
      * 2: 마이크·위치 목적, Gleo 경로, 수집 목록 고지 추가(PRD v4 F12). 동의는 마이크·위치를 함께 묻는 한 번이다.
+     * 3: 발화 텍스트 수신처가 Anthropic(Claude) 1순위, Google(Gemini) 대체로 바뀜(TRD D6).
      */
-    const val VERSION = 2
+    const val VERSION = 3
 
     fun effective(state: ConsentState, version: Int): ConsentState =
         if (state == ConsentState.GRANTED && version != VERSION) ConsentState.UNSET else state

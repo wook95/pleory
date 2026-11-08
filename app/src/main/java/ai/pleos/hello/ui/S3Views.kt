@@ -81,7 +81,7 @@ class ConsentView(context: Context, private val onAgree: () -> Unit, private val
 
     private companion object {
         val LINES = listOf(
-            "말한 내용" to "말한 내용은 차 안에서 글자로 바꾸고, 그 글자만 정리용 외부 AI(Google Gemini)로 보냅니다. 음성, 위치, 이름은 보내지 않습니다.",
+            "말한 내용" to "말한 내용은 차 안에서 글자로 바꾸고, 그 글자만 정리용 외부 AI로 보냅니다. 먼저 Anthropic(Claude)로 보내고, 그쪽이 실패하면 Google(Gemini)로 보냅니다. 음성, 위치, 이름은 보내지 않습니다.",
             "위치" to "현재 좌표는 날씨와 주소(장소 이름)를 찾는 데 씁니다. 지금 시험판은 고정값을 써서 좌표를 밖으로 보내지 않습니다. 경로와 거리는 차 안에서 계산합니다.",
             "Gleo AI로 남긴 메모" to "Gleo AI에게 말해 남긴 메모는 Pleos 플랫폼(Gleo AI)이 처리한 뒤 이 앱으로 전달합니다.",
             "앱이 모으는 것" to "말한 내용의 글자, 말한 시각과 위치·장소 이름·주행 거리·속도, 주행 경로, 정리된 항목(유형·감정·키워드), 동의 상태와 시각.",

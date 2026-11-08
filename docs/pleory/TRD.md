@@ -16,7 +16,7 @@
 | D3 | 상태 머신과 모든 SDK 이벤트는 **단일 직렬 실행 경로**(메인 루퍼 또는 단일 스레드 디스패처)로 모은다. SDK 콜백은 Binder 스레드에서 오므로 즉시 그 경로로 넘긴다 | LLM 콜백이 Binder 스레드에서 리스너를 직접 부른다(javap 확인). 경합을 한 곳에서 처리하기 위해서 |
 | D4 | 저장소는 **Room + KSP2**. AGP 9 내장 Kotlin은 KSP를 공식 지원한다. T1에서 실제 Entity·DAO 생성과 쓰기·재조회까지 확인하고, 실패할 때만 `SQLiteOpenHelper`로 간다 | PRD §3 |
 | D5 | **STT·TTS는 ON_DEVICE 고정.** SERVER/HYBRID STT는 음성이 서버로 나가서 PRD 원칙 4(차 밖으로 나가는 건 발화 텍스트와 좌표뿐)와 충돌한다 | 정확도가 부족하면 원칙을 바꿀지는 사용자가 결정한다(§7-2) |
-| D6 | **(11/8 확정) 공모전 공급자는 Gemini `gemini-2.5-flash`. 플랫폼 LLM(Gleo AI)이 서드파티에 열리면 `PleosLlmStructurer`로 전환한다** — 이 문장을 `Structurer` 인터페이스와 Gemini 구현의 KDoc, README에 그대로 남긴다. 상세:(REST, 텍스트만 전송, `responseSchema`로 JSON 강제, thinking 0, 앱 안 실측 약 1~1.3초). 목표 공급자는 Pleos LLM이다. 권한이 열리고 contextMap 처리(§7-1)가 확인되면 교체한다. `flash-lite`는 빈말에 없는 문장을 지어내서(규칙 4 위반) 쓰지 않는다. 503 등 일시 오류는 8초 안에서 1회 재시도. 구조화 LLM은 `Structurer` 인터페이스 + **실제 공급자 하나**. 후보는 Pleos LLM SDK SERVER(자격증명 필요) 또는 외부 LLM HTTP API(§7-1). `RuleStructurer`는 개발·테스트용이고, 이걸로 찍은 영상은 "기능 축소 데모"로 명시한다 | 접수양식의 핵심 주장이 "AI가 정리"다 |
+| D6 | **(11/8 변경) 공모전 공급자는 Claude `claude-haiku-5-5` 1순위, 실패하면 Gemini `gemini-2.5-flash`(§8-8). 플랫폼 LLM(Gleo AI)이 서드파티에 열리면 `PleosLlmStructurer`로 전환한다** — (이전: Gemini 단독) 이 문장을 `Structurer` 인터페이스와 Gemini 구현의 KDoc, README에 그대로 남긴다. 상세:(REST, 텍스트만 전송, `responseSchema`로 JSON 강제, thinking 0, 앱 안 실측 약 1~1.3초). 목표 공급자는 Pleos LLM이다. 권한이 열리고 contextMap 처리(§7-1)가 확인되면 교체한다. `flash-lite`는 빈말에 없는 문장을 지어내서(규칙 4 위반) 쓰지 않는다. 503 등 일시 오류는 8초 안에서 1회 재시도. 구조화 LLM은 `Structurer` 인터페이스 + **실제 공급자 하나**. 후보는 Pleos LLM SDK SERVER(자격증명 필요) 또는 외부 LLM HTTP API(§7-1). `RuleStructurer`는 개발·테스트용이고, 이걸로 찍은 영상은 "기능 축소 데모"로 명시한다 | 접수양식의 핵심 주장이 "AI가 정리"다 |
 | D7 | **DemoClock**: `Clock` 인터페이스. 데모 모드에서는 GPX 타임스탬프를 기준 시각으로 삼고 N배속으로 흐른다. `startedAt`, `Utterance.at`, `durationMin`, `congestionMin`, 구간 판단(§6-2 시각 규칙)은 전부 이 시계로 계산한다 | 1~2분 영상에서 카드가 "51분 · 23km · 정체 23분 · 18:57"을 보여야 한다 |
 | D8 | 거리·속도는 **좌표와 시각으로 직접 계산**한다(`Location.speed`가 GPX 재생에서 채워지는지 모른다). 역순·중복·오래된 좌표·GPS 점프(속도 > 200km/h)는 버린다. Odometer는 0이 아닐 때만 쓴다 | 에뮬레이터 Odometer 0.0 |
 | D9 | 목적지 상태는 **미확인 / 없음 / 있음(좌표)** 셋으로 구분한다. 도착 = 기어 P **AND** (`onDestinationArrived` OR 최신 유효 위치가 목적지 반경 300m OR 목적지 "없음"이 확정된 상태에서 P 5초). 목적지 변경이나 기어 D 복귀 때 도착 상태를 초기화한다 | 미확인을 "없음"으로 보면 P 5초 조건 때문에 잘못 도착 판정된다 |
@@ -277,4 +277,14 @@ FusedLocation 퍼미션명은 문서에서 확인해 추가한다. MainActivity�
 - 실측: Gleo는 설치(`PACKAGE_ADDED`) 때 새 패키지 schema를 바로 읽었고 재부팅이 필요 없었다. 옛 패키지 삭제(`PACKAGE_REMOVED`)도 바로 반영됐다. `com.pplab.pleory.ADD_DRIVE_NOTE`(저장·Gemini 구조화·success 회신)와 `com.pplab.pleory.SHOW_TODAY_CARD`(카드·success 회신) 모두 동작. 두 패키지가 같이 깔린 동안은 invokeWord가 겹치므로 옛 앱을 먼저 지웠다.
 - STT SERVER `registerApp`: 같은 Client ID로 새 패키지에서도 연결되고 토큰이 발급된다. 다만 인식 스트림은 gRPC `PERMISSION_DENIED: Unsupported endpoint or you do not have permission to use that endpoint`. 옛 applicationId로 다시 빌드해 같은 버튼을 눌러도 같은 오류여서, 패키지 변경 탓이 아니라 프로젝트 자격증명에 STT 서버 권한이 없는 것이다(LLM 400과 같은 계열, §7-1). 앱은 STT ON_DEVICE 고정(D5)이라 데모 경로에는 영향이 없다. Playground 쪽 권한 확인이 필요하면 사람 작업.
 - 새 패키지는 데이터가 비어 시작한다(옛 패키지 DB·동의는 옮기지 않음). 권한은 `pm grant --user 10 com.pplab.pleory …`로 다시 줬다.
+
+### 8-8. 구조화 LLM: Claude 1순위 + Gemini 대체 (2026-11-08, 사용자 결정)
+
+- 이유: Gemini 무료 키가 계속 HTTP 429(할당량 소진)를 내서 데모 발화가 RAW로 남았다.
+- 체인(`core/FallbackStructurer`): Claude `claude-haiku-5-5` 4.5초 → 실패하면(HTTP 오류·타임아웃·`stop_reason` refusal/max_tokens·형식·계약 위반) Gemini(남은 약 3.4초) → RAW. 전체 상한은 그대로 컨트롤러 8초이고, 취소되면 진행 중인 단계도 취소돼 늦은 응답이 두 번 저장되지 않는다. 동의 게이트(`ConsentGatedStructurer`)는 체인 전체를 감싼다. Gleo `ADD_DRIVE_NOTES` 경로는 LLM을 쓰지 않는다(그대로).
+- 구현: 공식 Java SDK `com.anthropic:anthropic-java:3.3.0`(Android minSdk 28에서 그대로 동작, raw HTTP 불필요). 시스템 프롬프트는 Gemini와 같은 PRD §4-1 문구(`StructureContract.SYSTEM_PROMPT`), 사용자 메시지는 발화 텍스트뿐. `output_config.format` JSON 스키마({items:[{text,type,emotion,keywords}]}, additionalProperties false), `effort: low`, 생각 끔(Haiku 5.5는 effort high 이하에서 허용), `max_tokens` 1024, temperature 없음, SDK 재시도 0. 받은 JSON도 `StructureContract.parse`로 다시 검증한다. Haiku 5.5는 서버 쪽 거절 대체가 없어서 Gemini가 대체다.
+- 키: `local.properties` `llm.claudeKey` 또는 셸 `PLEORY_CLAUDE_KEY` → `BuildConfig.CLAUDE_API_KEY`. `ANTHROPIC_API_KEY`는 읽지 않는다(셸에 있으면 사용자의 Claude Code 과금 키가 APK에 들어간다). 비어 있으면 Claude 단계를 건너뛰고 Gemini가 8초를 다 쓴다.
+- 고지: 발화 텍스트 수신처가 Anthropic(1순위)·Google(대체)로 바뀌어 동의 문구를 고치고 고지 버전을 3으로 올렸다(기존 동의자도 다시 묻는다).
+- 로그(`PleoryFlow`): `llm ok: claude`, `llm claude failed: claude http 429`처럼 단계와 분류만 남긴다. 본문·발화·키는 남기지 않는다.
+- 실측(에뮬레이터, 2026-11-08): Gleo 메모 첫 호출 3.1초(클라이언트 생성 포함), 이후 데모 발화 1.2~1.7초, 모두 `llm ok: claude`. 데모 카드: 한마디 2개 → 항목 3개(감정↓, 할 일, 감정↑), 요약 "힘들게 시작해서 노을로 끝났어. 할 일 하나 있어."
 

@@ -21,7 +21,7 @@
 ## 개인정보 처리
 
 - 처음 실행하면(주차 상태에서) 동의 화면이 뜬다. "동의"를 눌러야만 동의다. "동의 안 함"을 고르거나 답하지 않으면 AI 정리는 꺼지고, 기록은 말한 원문 그대로 남는다.
-- 보내는 것: 말한 내용의 텍스트만 Google Gemini로 보내 정리한다. 음성, 위치, 이름은 보내지 않는다.
+- 보내는 것: 말한 내용의 텍스트만 외부 LLM으로 보내 정리한다. 먼저 Anthropic(Claude `claude-haiku-5-5`)로 보내고, 실패하면 Google(Gemini `gemini-2.5-flash`)로 보낸다. 음성, 위치, 이름은 보내지 않는다.
 - 위치: 좌표는 날씨·주소 조회에 쓰고(지금은 fixture 라 밖으로 나가지 않는다), 경로와 거리는 차 안에서 계산한다.
 - Gleo AI: Gleo 에게 말해 남긴 메모는 Pleos 플랫폼(Gleo AI)이 처리한 뒤 앱으로 전달한다.
 - 앱이 모으는 것: 발화 텍스트, 발화 시각·위치·장소 이름·주행 거리·속도, 주행 경로, 정리된 항목(유형·감정·키워드), 동의 상태와 시각. 동의 화면에 같은 목록을 보여준다.
@@ -69,10 +69,11 @@ JDK 17 이상(Android Studio 번들 JBR 가능)이 필요하다. 루트의 `loca
 ```properties
 pleos.clientId=<Pleos Playground Client ID>
 pleos.clientSecret=<Pleos Playground Client Secret>
+llm.claudeKey=<Anthropic API key>
 llm.geminiKey=<Gemini API key>
 ```
 
-`llm.geminiKey`가 없으면 환경변수 `GEMINI_API_KEY`를 쓴다.
+`llm.claudeKey`가 없으면 환경변수 `PLEORY_CLAUDE_KEY`, `llm.geminiKey`가 없으면 `GEMINI_API_KEY`를 쓴다. `ANTHROPIC_API_KEY`는 읽지 않는다. Claude 키가 없으면 Gemini만 쓴다.
 
 ```bash
 ./gradlew assembleDebug
@@ -118,7 +119,7 @@ tools/run-demo.sh [배속=30] [pcm|text]
 
 ## LLM
 
-구조화는 외부 LLM API(Gemini)를 사용한다. 플랫폼 LLM(Gleo AI)이 서드파티에 열리면 전환한다.
+구조화는 외부 LLM API를 쓴다. Claude(`claude-haiku-5-5`, 공식 Java SDK)가 1순위이고 4.5초 안에 실패하면 Gemini, 그래도 실패하면 말한 원문 그대로 남긴다(전체 8초 안). 플랫폼 LLM(Gleo AI)이 서드파티에 열리면 전환한다.
 
 ## 알려진 한계
 
@@ -129,5 +130,5 @@ tools/run-demo.sh [배속=30] [pcm|text]
 
 ## 개발자 메모
 
-- APK에는 빌드 시점의 Gemini 키가 들어간다. 최종 제출 APK는 사용량 한도를 건 전용 키로 다시 빌드하고, 그 키는 심사 뒤 폐기한다.
+- APK에는 빌드 시점의 Claude·Gemini 키가 들어간다. 최종 제출 APK는 사용량 한도를 건 전용 키로 다시 빌드하고, 그 키는 심사 뒤 폐기한다.
 - `local.properties`와 키스토어는 커밋하지 않는다.
