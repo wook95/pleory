@@ -2,6 +2,7 @@ import java.util.Properties
 
 plugins {
     id("com.android.application")
+    id("com.google.devtools.ksp")
 }
 
 // 비밀값은 local.properties(gitignore)에서 읽는다. 커밋하지 않는다
@@ -32,6 +33,8 @@ android {
         buildConfig = true
     }
 
+    useLibrary("android.car")
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -42,9 +45,16 @@ dependencies {
     // 시작 가이드의 2.3.1 은 저장소에 없다 — 2.3.2 가 최신
     implementation("ai.pleos.playground:Vehicle:2.3.2")
 
-    // 1일차 SDK 스파이크(app/src/debug/.../spike) 전용. 본 기능에 쓰게 되면 implementation 으로 올린다
-    debugImplementation("ai.pleos.playground:SpeechToText:3.3.1")
-    debugImplementation("ai.pleos.playground:TextToSpeech:3.3.1")
-    debugImplementation("ai.pleos.playground:NaviHelper:3.0.5")
+    implementation("ai.pleos.playground:SpeechToText:3.3.1")
+    implementation("ai.pleos.playground:TextToSpeech:3.3.1")
+    implementation("ai.pleos.playground:NaviHelper:3.0.5")
+    implementation("ai.pleos.playground:FusedLocation:1.1.3")
+
+    // Room 2.8.x + KSP2 (AGP 9 내장 Kotlin)
+    implementation("androidx.room:room-runtime:2.8.4")
+    implementation("androidx.room:room-ktx:2.8.4")
+    ksp("androidx.room:room-compiler:2.8.4")
+
+    // Gemini 스파이크 전용(debug). 플랫폼 LLM 이 열리면 재검토
     debugImplementation("ai.pleos.playground:LLM:2.1.3.1")
 }
