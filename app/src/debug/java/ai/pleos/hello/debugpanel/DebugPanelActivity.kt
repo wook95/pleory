@@ -5,7 +5,7 @@ import ai.pleos.hello.platform.DestinationState
 import ai.pleos.hello.platform.Gear
 import ai.pleos.hello.platform.LocationFix
 import ai.pleos.hello.platform.NaviListener
-import ai.pleos.hello.platform.SpeechInputListener
+import ai.pleos.hello.core.SessionEvent
 import android.app.Activity
 import android.os.Bundle
 import android.util.Log
@@ -22,8 +22,8 @@ import java.io.File
 class DebugPanelActivity : Activity() {
 
     private lateinit var out: TextView
-    private val hub get() = (application as PleoryApp).sdkHub
-    private var round = 0
+    private val app get() = application as PleoryApp
+    private val hub get() = app.sdkHub
     private val points = ArrayDeque<LocationFix>()
 
     private val gearListener: (Gear) -> Unit = { log("gear event $it") }
@@ -37,13 +37,6 @@ class DebugPanelActivity : Activity() {
         override fun onDestination(state: DestinationState) = log("navi destination $state")
         override fun onArrived() = log("navi ARRIVED")
     }
-    private val speechListener = object : SpeechInputListener {
-        override fun onPartial(text: String, round: Int) = log("stt partial r=$round '$text'")
-        override fun onFinal(text: String, round: Int) = log("stt FINAL r=$round '$text'")
-        override fun onEnded(round: Int) = log("stt ended r=$round")
-        override fun onError(message: String, round: Int) = log("stt error r=$round $message")
-    }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         out = TextView(this).apply { textSize = 16f }
@@ -57,9 +50,10 @@ class DebugPanelActivity : Activity() {
             "내비 refresh" to { hub.navi.refresh(); log("navi destination now ${hub.navi.destination}") },
             "위치 start" to { hub.location.start(); log("location start") },
             "위치 stop" to { hub.location.stop(); log("location stop, last=${points.toList()}") },
-            "STT 시작(마이크)" to { hub.speechInput.start(++round); log("stt start r=$round") },
-            "STT PCM(u.pcm)" to ::sttFromPcm,
-            "STT 취소" to { hub.speechInput.cancel(); log("stt cancel") },
+            "탭(TalkTapped, 마이크)" to { app.controller.post(SessionEvent.TalkTapped); log("TalkTapped") },
+            "STT PCM 주입(파이프라인)" to ::sttFromPcm,
+            "DemoClock ON ${DEMO_SPEED.toInt()}x (18:40 시작)" to { app.clock.setDemo(DEMO_SPEED); log("DemoClock ON ${DEMO_SPEED}x now=${app.clock.nowMillis()}") },
+            "DemoClock OFF" to { app.clock.setDemo(null); log("DemoClock OFF now=${app.clock.nowMillis()}") },
             "TTS 적어뒀어" to { hub.speechOutput.say("적어뒀어"); log("tts say") },
             "UX 제한 상태" to { log("ux required=${hub.uxRestrictions.isDistractionOptimizationRequired}") },
         ).forEach { (label, action) ->
@@ -76,8 +70,6 @@ class DebugPanelActivity : Activity() {
         hub.uxRestrictions.addListener(uxListener)
         hub.location.addListener(locationListener)
         hub.navi.addListener(naviListener)
-        hub.speechInput.listener = speechListener
-        hub.speechOutput.onDone = { log("tts onDone") }
     }
 
     private fun sdkStates() = log(
@@ -85,10 +77,12 @@ class DebugPanelActivity : Activity() {
             "location=${hub.locationState.value} stt=${hub.sttState.value} tts=${hub.ttsState.value}",
     )
 
+    /** 다음 StartStt 가 마이크 대신 PCM 을 쓰게 예약하고, 일반 탭과 같은 경로(TalkTapped)로 시작한다. */
     private fun sttFromPcm() {
         val f = File(filesDir, "u.pcm")
-        hub.speechInput.startFromPcm(f.readBytes(), ++round)
-        log("stt pcm start r=$round ${f.length()}B")
+        app.speechInput.pendingPcm = f.readBytes()
+        app.controller.post(SessionEvent.TalkTapped)
+        log("stt pcm queued ${f.length()}B, TalkTapped")
     }
 
     private fun log(msg: String) {
@@ -101,13 +95,12 @@ class DebugPanelActivity : Activity() {
         hub.uxRestrictions.removeListener(uxListener)
         hub.location.removeListener(locationListener)
         hub.navi.removeListener(naviListener)
-        hub.speechInput.listener = null
-        hub.speechOutput.onDone = null
         super.onDestroy()
     }
 
     private companion object {
         const val TAG = "PleoryPlatform"
         const val MAX_POINTS = 5
+        const val DEMO_SPEED = 25.0
     }
 }

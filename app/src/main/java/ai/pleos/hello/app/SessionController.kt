@@ -50,6 +50,8 @@ class SessionController(
     dispatcher: CoroutineDispatcher,
     private val structureTimeoutMs: Long = 8_000,
     private val sttTimeoutMs: Long = 15_000,
+    /** 디버그 로그 훅. 이벤트·명령을 한 줄씩 넘긴다(JVM 테스트에서 android.util.Log 를 피하려고 주입). */
+    private val trace: (String) -> Unit = {},
 ) {
     private class Entry(val text: String, val dbId: CompletableDeferred<Long>) {
         var generation = 0
@@ -63,6 +65,9 @@ class SessionController(
 
     val state: SessionState get() = machine.state
 
+    /** 이벤트 처리 직후 현재 상태를 알린다(UI 갱신용). 직렬 경로에서 불린다. */
+    var onStateChanged: ((SessionState) -> Unit)? = null
+
     init {
         speechIn.listener = object : SpeechInputListener {
             override fun onFinal(text: String, round: Int) = post(SessionEvent.SttFinal(text, round))
@@ -72,7 +77,11 @@ class SessionController(
 
     /** 어느 스레드에서든 호출 가능. 직렬 경로로 넘긴다. */
     fun post(event: SessionEvent) {
-        scope.launch { run(machine.handle(event)) }
+        scope.launch {
+            trace("event $event")
+            run(machine.handle(event))
+            onStateChanged?.invoke(machine.state)
+        }
     }
 
     /** 이전에 PENDING 으로 남은 발화를 다시 구조화한다(다음 시동, D12). */
@@ -100,6 +109,7 @@ class SessionController(
     }
 
     private fun execute(c: SessionCommand) {
+        trace("command $c")
         when (c) {
             SessionCommand.StopSpeech -> speechOut.stop()
             is SessionCommand.StartStt -> {
@@ -176,6 +186,7 @@ class SessionController(
         scope.launch {
             val items = if (status == LlmStatus.DONE) entry.items else listOf(StructureContract.rawFallback(entry.text))
             store.replaceItems(entry.dbId.await(), items, status)
+            trace("committed $status items=${items.size} dbId=${entry.dbId.await()}")
         }
     }
 }
