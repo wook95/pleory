@@ -15,12 +15,15 @@ object ScreenGate {
     fun allowed(gear: Gear?, distractionOptimizationRequired: Boolean, activeRestrictions: Int) =
         gear == Gear.P && !distractionOptimizationRequired && (activeRestrictions and BLOCKING) == 0
 
-    /** 우선순위: 게이트 닫힘 → S0, 동의 필요 → 동의, 설정 열림 → 설정, 카드 상태 → 카드. */
-    fun resolve(allowed: Boolean, consentNeeded: Boolean, settingsOpen: Boolean, state: SessionState): Screen = when {
+    /**
+     * 우선순위: 게이트 닫힘 → S0, 동의 필요 → 동의, 설정 열림 → 설정, 카드 상태 또는 카드 요청 → 카드.
+     * [cardRequested] 는 Gleo SHOW_TODAY_CARD 로 도착 전에도 지금(또는 마지막) 세션 카드를 여는 경우다.
+     */
+    fun resolve(allowed: Boolean, consentNeeded: Boolean, settingsOpen: Boolean, state: SessionState, cardRequested: Boolean = false): Screen = when {
         !allowed -> Screen.S0
         consentNeeded -> Screen.CONSENT
         settingsOpen -> Screen.SETTINGS
-        state == SessionState.CARD -> Screen.CARD
+        state == SessionState.CARD || cardRequested -> Screen.CARD
         else -> Screen.S0
     }
 }

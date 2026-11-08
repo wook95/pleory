@@ -30,6 +30,9 @@ interface PleoryStore {
     /** 카드 표시용 모델. 구조화가 안 끝난 발화는 원문 한 줄로 들어간다. */
     suspend fun loadCard(sessionId: Long): CardModel? = null
 
+    /** [exclude] 를 뺀, 마지막으로 끝난 세션 id. */
+    suspend fun latestEndedSession(exclude: Long): Long? = null
+
     /** 모든 Room 행(세션·발화·항목·궤적·장소)을 지운다. 동의 설정은 건드리지 않는다. */
     suspend fun deleteAll() {}
 }
@@ -83,6 +86,8 @@ class RoomPleoryStore(private val db: PleoryDb) : PleoryStore {
         val utterances = db.utterances().bySession(sessionId).map { it to db.items().byUtterance(it.id) }
         return CardModelBuilder.build(session, utterances, db.trackPoints().bySession(sessionId))
     }
+
+    override suspend fun latestEndedSession(exclude: Long) = db.sessions().latestEnded(exclude)
 
     override suspend fun deleteAll(): Unit = withContext(Dispatchers.IO) {
         db.clearAllTables()

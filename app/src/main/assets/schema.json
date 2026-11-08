@@ -43,6 +43,19 @@
         },
         "component": "service"
       }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "SHOW_TODAY_CARD",
+        "description": "Open the summary card of the current or most recent drive.",
+        "parameters": {
+          "type": "object",
+          "properties": {},
+          "required": []
+        },
+        "component": "activity"
+      }
     }
   ]
 }

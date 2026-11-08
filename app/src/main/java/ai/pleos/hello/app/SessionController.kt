@@ -241,6 +241,18 @@ class SessionController(
         return store.loadCard(sessionId.await())
     }
 
+    /**
+     * Gleo SHOW_TODAY_CARD 로 연 카드. 도착 카드 상태이거나 지금 세션에 한마디가 있으면 지금 세션,
+     * 아니면(방금 시작한 빈 세션) 마지막으로 끝난 세션의 카드. 끝난 세션도 없으면 지금 세션.
+     */
+    suspend fun loadTodayCard(): CardModel? {
+        cardJob?.join()
+        val sid = sessionId.await()
+        val current = store.loadCard(sid)
+        if (machine.state == SessionState.CARD || current?.utterances?.isNotEmpty() == true) return current
+        return store.latestEndedSession(sid)?.let { store.loadCard(it) } ?: current
+    }
+
     private fun run(commands: List<SessionCommand>) {
         commands.forEach(::execute)
     }

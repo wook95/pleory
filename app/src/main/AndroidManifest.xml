@@ -22,12 +22,19 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:launchMode="singleTop"
             android:resizeableActivity="true"
             android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|density"
             android:theme="@android:style/Theme.DeviceDefault.NoActionBar">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <!-- Gleo AI SHOW_TODAY_CARD(component=activity). 실측대로 패키지 접두 이름과 문서의 맨 이름을 함께 받는다 -->
+            <intent-filter>
+                <action android:name="ai.pleos.hello.SHOW_TODAY_CARD" />
+                <action android:name="SHOW_TODAY_CARD" />
+                <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
             <meta-data
                 android:name="distractionOptimized"

@@ -16,6 +16,7 @@ import org.json.JSONObject
  * 머신이 받지 않는 상태(시동 OFF 등)면 실패로 회신한다.
  * 응답은 7초 안에 APP_ACTION_RESPONSE 브로드캐스트로 보낸다. Gleo 는 Thinking 상태에서만 응답을 받으므로
  * 우리 TTS 로 포커스를 뺏지 않고 mode=voice 로 Gleo 가 확인 음성을 내게 한다.
+ * SHOW_TODAY_CARD(component=activity)는 이 receiver 가 아니라 MainActivity 가 받는다.
  */
 class GleoActionReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
@@ -49,24 +50,31 @@ class GleoActionReceiver : BroadcastReceiver() {
         return runCatching { JSONObject(raw.trim().trim('"')) }.getOrNull()
     }
 
-    private fun respond(context: Context, function: String, status: String, message: String) {
-        val response = JSONObject()
-            .put("functionName", function)
-            .put("status", status)
-            .put("message", message)
-            .put("mode", "voice")
-        context.sendBroadcast(
-            Intent(ACTION_RESPONSE)
-                .putExtra("packageName", context.packageName)
-                .putExtra("response", response.toString()),
-        )
-        Log.i(TAG, "gleo response sent status=$status")
-    }
-
     companion object {
+        /**
+         * Gleo 에 회신한다. 보안 가이드(수신자 제한 없는 암시적 브로드캐스트 금지)에 따라 Gleo 패키지로 한정한다.
+         * 실측: APP_ACTION_RESPONSE 는 [GLEO_PACKAGE] 가 동적으로 등록한 receiver 가 받는다.
+         */
+        fun respond(context: Context, function: String, status: String, message: String) {
+            val response = JSONObject()
+                .put("functionName", function)
+                .put("status", status)
+                .put("message", message)
+                .put("mode", "voice")
+            context.sendBroadcast(
+                Intent(ACTION_RESPONSE)
+                    .setPackage(GLEO_PACKAGE)
+                    .putExtra("packageName", context.packageName)
+                    .putExtra("response", response.toString()),
+            )
+            Log.i(TAG, "gleo response sent fn=$function status=$status")
+        }
+
         private const val TAG = "PleoryFlow"
         private const val FN_ADD_DRIVE_NOTE = "ADD_DRIVE_NOTE"
         private const val FN_ADD_DRIVE_NOTES = "ADD_DRIVE_NOTES"
+        const val FN_SHOW_TODAY_CARD = "SHOW_TODAY_CARD"
+        private const val GLEO_PACKAGE = "ai.umos.ambientai"
         private const val ACTION_RESPONSE = "ai.pleos.playground.intent.action.APP_ACTION_RESPONSE"
         private const val EXTRA_ACTION_PARAM = "ACTION_PARAM"
         private const val KEY_NOTE = "note"
@@ -87,6 +95,16 @@ class GleoActionReceiver : BroadcastReceiver() {
          * 와 문서 표기 "ADD_DRIVE_NOTE" 를 모두 받는다. 모르는 action 이면 null.
          */
         fun functionOf(action: String?): String? = listOf(FN_ADD_DRIVE_NOTE, FN_ADD_DRIVE_NOTES)
-            .firstOrNull { action == it || action?.endsWith(".$it") == true }
+            .firstOrNull { matches(action, it) }
+
+        /** MainActivity 가 받는 SHOW_TODAY_CARD 인가(패키지 접두·맨 이름 모두). */
+        fun isShowTodayCard(action: String?) = matches(action, FN_SHOW_TODAY_CARD)
+
+        /** SHOW_TODAY_CARD 회신(status, message). 카드는 주차 중(화면 게이트 열림)에만 연다(PRD v4 §11). */
+        fun showTodayCardReply(parked: Boolean): Pair<String, String> =
+            if (parked) "success" to "The drive card is now on the screen."
+            else "fail" to "The card is available only while parked."
+
+        private fun matches(action: String?, function: String) = action == function || action?.endsWith(".$function") == true
     }
 }

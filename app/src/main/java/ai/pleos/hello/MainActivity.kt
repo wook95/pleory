@@ -6,6 +6,7 @@ import ai.pleos.hello.core.Screen
 import ai.pleos.hello.core.ScreenGate
 import ai.pleos.hello.core.SessionEvent
 import ai.pleos.hello.core.SessionState
+import ai.pleos.hello.gleo.GleoActionReceiver
 import ai.pleos.hello.platform.Gear
 import ai.pleos.hello.ui.ConsentView
 import ai.pleos.hello.ui.S0DriveView
@@ -13,6 +14,7 @@ import ai.pleos.hello.ui.S1CardView
 import ai.pleos.hello.ui.SettingsView
 import android.Manifest
 import android.app.Activity
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
 import android.util.Log
@@ -42,6 +44,9 @@ class MainActivity : Activity() {
     private var lastState = SessionState.OFF
     private var settingsOpen = false
     private var consentRequested = false
+
+    /** Gleo SHOW_TODAY_CARD 로 연 카드. 도착 전이면 지금 세션, 닫힌 뒤면 마지막 세션의 카드다. 게이트가 닫히면 내린다. */
+    private var cardRequested = false
 
     /** 첫 주차에 동의 화면이 카드를 가려서 요약을 아직 못 들려줬다. 동의 답 뒤 카드가 뜨면 다시 읽는다. */
     private var summaryOwed = false
@@ -86,6 +91,34 @@ class MainActivity : Activity() {
             addView(settingsView)
             addView(consentView)
         })
+        handleGleo(intent)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleGleo(intent)
+    }
+
+    /**
+     * Gleo SHOW_TODAY_CARD(component=activity). 주차 중이면 카드를 열고 success, 주행 중이면 화면을 바꾸지 않고 fail 로 회신한다.
+     * 기어는 콜드 스타트 직후 아직 모를 수 있어 현재 기어를 한 번 읽은 뒤(직렬 경로) 판단한다.
+     */
+    private fun handleGleo(intent: Intent?) {
+        if (!GleoActionReceiver.isShowTodayCard(intent?.action)) return
+        app.sdkHub.gear.current {
+            runOnUiThread {
+                val parked = app.gateAllowed()
+                val (status, message) = GleoActionReceiver.showTodayCardReply(parked)
+                Log.i(PleoryApp.FLOW_TAG, "gleo ${GleoActionReceiver.FN_SHOW_TODAY_CARD} parked=$parked")
+                if (parked) {
+                    settingsOpen = false
+                    cardRequested = true
+                    render(lastState)
+                }
+                GleoActionReceiver.respond(this, GleoActionReceiver.FN_SHOW_TODAY_CARD, status, message)
+            }
+        }
     }
 
     override fun onStart() {
@@ -120,8 +153,9 @@ class MainActivity : Activity() {
         if (!allowed) {
             settingsOpen = false
             consentRequested = false
+            cardRequested = false
         }
-        val screen = ScreenGate.resolve(allowed, app.consent.needsPrompt || consentRequested, settingsOpen, state)
+        val screen = ScreenGate.resolve(allowed, app.consent.needsPrompt || consentRequested, settingsOpen, state, cardRequested)
         // 동의 화면이 카드를 가리는 동안에는 요약을 막고, 답한 뒤 카드가 보이면 한 번만 읽는다
         app.controller.holdSummary(state == SessionState.CARD && screen == Screen.CONSENT)
         if (state != SessionState.CARD) summaryOwed = false
@@ -164,13 +198,20 @@ class MainActivity : Activity() {
 
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
-        if (settingsOpen) closeSettings() else super.onBackPressed()
+        when {
+            settingsOpen -> closeSettings()
+            cardRequested && lastState != SessionState.CARD -> { cardRequested = false; render(lastState) }
+            else -> super.onBackPressed()
+        }
     }
 
     /** 카드 내용을 DB 에서 다시 읽는다. 종료값 저장이 끝난 뒤에 읽는다(컨트롤러가 보장). */
     private fun loadCard() {
         cardLoad?.cancel()
-        cardLoad = uiScope.launch { app.controller.loadCard()?.let { card.setModel(it) } }
+        val requested = cardRequested && lastState != SessionState.CARD
+        cardLoad = uiScope.launch {
+            (if (requested) app.controller.loadTodayCard() else app.controller.loadCard())?.let { card.setModel(it) }
+        }
     }
 
     /** 권한 팝업은 주차(P) 중에만, 한 번만 띄운다. */

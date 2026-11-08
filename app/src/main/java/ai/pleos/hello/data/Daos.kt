@@ -14,6 +14,8 @@ interface SessionDao {
     @Update suspend fun update(session: Session)
     @Query("DELETE FROM session WHERE id = :id") suspend fun delete(id: Long)
     @Query("UPDATE session SET state = :state WHERE id = :id") suspend fun setState(id: Long, state: SessionState)
+    @Query("SELECT id FROM session WHERE endedAt IS NOT NULL AND id != :exclude ORDER BY endedAt DESC LIMIT 1")
+    suspend fun latestEnded(exclude: Long): Long?
     @Query("UPDATE session SET state = :state, endedAt = :endedAt WHERE id = :id")
     suspend fun close(id: Long, state: SessionState, endedAt: Long)
 }

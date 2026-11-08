@@ -47,4 +47,12 @@ class ScreenGateTest {
         assertEquals(Screen.CARD, ScreenGate.resolve(true, false, false, SessionState.CARD))
         assertEquals(Screen.S0, ScreenGate.resolve(true, false, false, SessionState.SESSION_OPEN))
     }
+
+    @Test fun resolve_cardRequested_opensCardBeforeArrival_butNotOverConsentOrClosedGate() {
+        assertEquals(Screen.CARD, ScreenGate.resolve(true, false, false, SessionState.SESSION_OPEN, cardRequested = true))
+        assertEquals(Screen.CARD, ScreenGate.resolve(true, false, false, SessionState.CLOSED, cardRequested = true))
+        assertEquals(Screen.CONSENT, ScreenGate.resolve(true, true, false, SessionState.SESSION_OPEN, cardRequested = true))
+        assertEquals(Screen.SETTINGS, ScreenGate.resolve(true, false, true, SessionState.SESSION_OPEN, cardRequested = true))
+        assertEquals(Screen.S0, ScreenGate.resolve(false, false, false, SessionState.SESSION_OPEN, cardRequested = true))
+    }
 }
