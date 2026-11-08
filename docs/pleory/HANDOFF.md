@@ -27,8 +27,8 @@
 
 ## 검증
 
-- 단위 테스트 247개 통과, `compileReleaseKotlin` 통과, `video/` `tsc --noEmit` 통과.
-- 코드 리뷰(opus): 치명·높음 0. 중간 5건(요약이 S2 위에서 늦게 말함, DemoReceiver 노출, 리마인드 정렬·트리거 문서 불일치, 게이트 판정) 모두 수정.
+- 단위 테스트 253개 통과, `compileReleaseKotlin` 통과, `video/` `tsc --noEmit` 통과.
+- 코드 리뷰(opus): 치명·높음 0. 중간 5건(요약이 S2 위에서 늦게 말함, DemoReceiver 노출, 리마인드 정렬·트리거 문서 불일치, 게이트 판정) 모두 수정. 재리뷰 2회 뒤 최종 APPROVE(실차 도착 래치, 백그라운드 요약 보류 해제, 디버그 화면 DUMP 권한까지 반영).
 - 에뮬레이터: S2 넓은·좁은 창, QR 스크린샷을 zxing-cpp 로 디코드해 카드 글과 일치, 데모 day1/day2 로그(`llm ok: claude` 2회, `item deleted`, `qr open/close`, `history todoOnly`, `gleo ADD_DRIVE_NOTE accepted`, `remind speak n=1`, `remind done`).
 - 영상: 스틸 30장 확인(`apk/video/v2/stills/`), 구간별 음량 측정(대사 −18~−21, 앱 TTS −16~−18, Gleo 대답 −18.7 LUFS).
 
@@ -65,6 +65,8 @@ cd video && npm install && bash scripts/prepare.sh ../apk/video/v2 && npm run re
 - Pleos 문의: STT SERVER·LLM 권한, 실차 Gleo 스키마 승인.
 
 ## 알아둘 점
+
+- 실차 한계(리뷰 MEDIUM, 제출 비차단): 내비 도착 뒤 경로가 지워지고 후진(R)·중립(N)을 거쳐 P 에 놓으면 도착 래치가 지워져 리마인드를 건너뛴다(`CardTrigger.kt:28`). 고치려면 래치를 D 에서만 지우고 "도착 → None → R → P" 테스트를 더한다. TRD D9 행과 §8-9 문구도 그때 맞춘다.
 
 - xoxo-112(태연) 에게 Collaborator 초대를 보냈다. 수락 전이면 저장소가 안 열린다.
 - Release v0.2 의 debug APK 에는 개인 Claude·Gemini 키가 들어 있다. 저장소가 비공개라 두었지만 외부로 넘기지 않는다.
