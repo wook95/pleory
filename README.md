@@ -69,7 +69,7 @@ adb shell am start -n ai.pleos.hello/.MainActivity
 adb logcat -s PleoryFlow:I PleoryPlatform:I
 ```
 
-설치된 APK는 `apk/pleory-1.0.apk`다(release 빌드).
+release APK는 git에 넣지 않는다(빌드 시 키가 들어가기 때문). 저장소의 Releases에 첨부하며, 받은 파일을 `apk/`에 두고 아래처럼 설치한다.
 
 ```bash
 adb install -r apk/pleory-1.0.apk
