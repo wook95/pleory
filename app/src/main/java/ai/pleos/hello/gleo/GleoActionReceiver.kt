@@ -20,7 +20,7 @@ import org.json.JSONObject
  */
 class GleoActionReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        val function = functionOf(intent.action) ?: return
+        val function = functionOf(intent.action, context.packageName) ?: return
         val param = parseParam(intent)
         val itemsJson = if (function == FN_ADD_DRIVE_NOTES) param?.optJSONArray(KEY_ITEMS)?.toString() else null
         val note = (param?.optString(if (function == FN_ADD_DRIVE_NOTES) KEY_ORIGINAL else KEY_NOTE)?.trim())
@@ -91,20 +91,20 @@ class GleoActionReceiver : BroadcastReceiver() {
         }
 
         /**
-         * intent action 을 schema 의 function 이름으로 바꾼다. Gleo 가 실제로 보내는 "ai.pleos.hello.ADD_DRIVE_NOTE"
-         * 와 문서 표기 "ADD_DRIVE_NOTE" 를 모두 받는다. 모르는 action 이면 null.
+         * intent action 을 schema 의 function 이름으로 바꾼다. Gleo 가 실제로 보내는 "<applicationId>.ADD_DRIVE_NOTE"
+         * ([packageName] 접두)와 문서 표기 "ADD_DRIVE_NOTE" 를 모두 받는다. 모르는 action 이면 null.
          */
-        fun functionOf(action: String?): String? = listOf(FN_ADD_DRIVE_NOTE, FN_ADD_DRIVE_NOTES)
-            .firstOrNull { matches(action, it) }
+        fun functionOf(action: String?, packageName: String): String? = listOf(FN_ADD_DRIVE_NOTE, FN_ADD_DRIVE_NOTES)
+            .firstOrNull { matches(action, packageName, it) }
 
         /** MainActivity 가 받는 SHOW_TODAY_CARD 인가(패키지 접두·맨 이름 모두). */
-        fun isShowTodayCard(action: String?) = matches(action, FN_SHOW_TODAY_CARD)
+        fun isShowTodayCard(action: String?, packageName: String) = matches(action, packageName, FN_SHOW_TODAY_CARD)
 
         /** SHOW_TODAY_CARD 회신(status, message). 카드는 주차 중(화면 게이트 열림)에만 연다(PRD v4 §11). */
         fun showTodayCardReply(parked: Boolean): Pair<String, String> =
             if (parked) "success" to "The drive card is now on the screen."
             else "fail" to "The card is available only while parked."
 
-        private fun matches(action: String?, function: String) = action == function || action?.endsWith(".$function") == true
+        private fun matches(action: String?, packageName: String, function: String) = action == function || action == "$packageName.$function"
     }
 }

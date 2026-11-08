@@ -188,7 +188,7 @@ FusedLocation 퍼미션명은 문서에서 확인해 추가한다. MainActivity�
 5. **STT 실패 신호**: 주행 중 인식 실패 시 무음(현 PRD)으로 둘지, 짧은 이어콘이나 "다시 말해줘"를 낼지. 무음이면 운전자가 화면을 확인하게 된다.
 6. **영상 콘티**: 주행 중 화면이 바뀌지 않는 장면을 어떻게 보여 줄지(Virtual Console 동시 노출, 시계·자막 오버레이). 기어 P와 카드가 뜨는 장면을 한 컷에 담는다.
 7. **profileId 출처**: Pleos 프로필 API 확인 전까지 고정 ID를 쓰고 README에 적는다.
-8. **applicationId** `ai.pleos.hello`는 플랫폼 소유자 네임스페이스처럼 보인다. 제출 전에 바꿀지.
+8. **applicationId**: `ai.pleos.hello`는 플랫폼 소유자 네임스페이스처럼 보인다. → 2026-11-08 결정: `com.pplab.pleory`로 바꿨다(§8-7). Kotlin 패키지·namespace는 `ai.pleos.hello` 그대로.
 
 ---
 
@@ -227,7 +227,7 @@ FusedLocation 퍼미션명은 문서에서 확인해 추가한다. MainActivity�
 - **Gleo 음성 경로는 Gleo가 구조화한다.** 스키마에 `ADD_DRIVE_NOTES{original, items:array}`를 두면 Gleo(gpt-4o 기반 함수 호출)가 항목·유형·감정·키워드를 채워 보낸다. 받은 items는 `StructureContract`로 검증해 그대로 저장한다(Gemini 호출 없음). 계약 위반이나 `ADD_DRIVE_NOTE{note}`(원문만)로 오면 Gemini, 그것도 실패하면 RAW.
 - **화면 버튼 경로는 Gemini를 유지한다.** 서드파티가 Gleo에 텍스트를 넘기는 공개 API가 없다. `ai.umos.intent.action.ASR` 테스트 broadcast는 개발용이라 제품에 쓰지 않는다. Pleos LLM SDK는 권한 없음(§7-1).
 - 실측으로 확인한 Gleo 동작(문서와 다른 점 포함):
-  - action 이름은 `ai.pleos.hello.ADD_DRIVE_NOTE`처럼 패키지가 붙어서 온다.
+  - action 이름은 `ai.pleos.hello.ADD_DRIVE_NOTE`처럼 패키지(applicationId)가 붙어서 온다. 지금은 `com.pplab.pleory.ADD_DRIVE_NOTE`(§8-7).
   - 우리 TTS가 포커스를 잡으면 Gleo가 응답을 거부한다 → Gleo 경로에서는 "적어뒀어"를 말하지 않고 응답 mode=voice.
   - 에뮬레이터에서는 스키마 승인 없이 호출된다(blacklist 비어 있음). 라우팅은 비결정적이다 — "플레오리 앱에서 …"가 안정적.
   - 지연: 주입부터 수신까지 약 1.7~3.4초.
@@ -267,6 +267,14 @@ FusedLocation 퍼미션명은 문서에서 확인해 추가한다. MainActivity�
 따르지 않은 것과 이유
 - **기어 API.** v4는 "Vehicle SDK 2.3.2에 기어 API 없음 → AAOS Car API"라고 쓰지만 우리 에뮬레이터에서는 `vehicle.getGear().registerGearSelection`·`getCurrentGearSelectionState`가 동작한다(TRD D4·§8-1 4번). 그대로 둔다. 기획 쪽에 이 차이를 알린다.
 - **Gleo `ADD_NOTE{content}` + `mode: "silent"` + 앱 TTS "적어뒀어".** 실측 검증된 `ADD_DRIVE_NOTE`/`ADD_DRIVE_NOTES`와 `mode=voice`를 유지한다. 우리 TTS가 포커스를 잡으면 Gleo가 응답을 거부했고(§8-4), Gleo는 action 이름에 패키지를 붙여 보낸다.
-- **패키지명 `com.pplab.pleory`.** 명세 schema 예시의 값이다. applicationId 변경은 사람 결정 대기라 `ai.pleos.hello`를 유지한다.
+- ~~패키지명 `com.pplab.pleory`~~ → 사용자 결정으로 바꿨다(§8-7).
 - compileSdk(명세 스파이크 35), LLM 제공자(Gemini)는 바꾸지 않았다.
+
+### 8-7. applicationId 변경 (2026-11-08, 사용자 결정)
+
+- `applicationId`를 `com.pplab.pleory`로 바꿨다. Kotlin 패키지와 `namespace`는 `ai.pleos.hello` 그대로다(소스 이동 없음, 강제되는 것도 없었다). adb 컴포넌트는 `com.pplab.pleory/ai.pleos.hello.MainActivity`.
+- Gleo: schema `packageName`을 바꾸고, 매니페스트 접두 action은 `${applicationId}.<FN>` 자리표시자로 쓴다(빌드 결과 `com.pplab.pleory.ADD_DRIVE_NOTE` 확인). 수신 판정은 `context.packageName` 접두 또는 맨 이름만 받는다(다른 접두는 거절).
+- 실측: Gleo는 설치(`PACKAGE_ADDED`) 때 새 패키지 schema를 바로 읽었고 재부팅이 필요 없었다. 옛 패키지 삭제(`PACKAGE_REMOVED`)도 바로 반영됐다. `com.pplab.pleory.ADD_DRIVE_NOTE`(저장·Gemini 구조화·success 회신)와 `com.pplab.pleory.SHOW_TODAY_CARD`(카드·success 회신) 모두 동작. 두 패키지가 같이 깔린 동안은 invokeWord가 겹치므로 옛 앱을 먼저 지웠다.
+- STT SERVER `registerApp`: 같은 Client ID로 새 패키지에서도 연결되고 토큰이 발급된다. 다만 인식 스트림은 gRPC `PERMISSION_DENIED: Unsupported endpoint or you do not have permission to use that endpoint`. 옛 applicationId로 다시 빌드해 같은 버튼을 눌러도 같은 오류여서, 패키지 변경 탓이 아니라 프로젝트 자격증명에 STT 서버 권한이 없는 것이다(LLM 400과 같은 계열, §7-1). 앱은 STT ON_DEVICE 고정(D5)이라 데모 경로에는 영향이 없다. Playground 쪽 권한 확인이 필요하면 사람 작업.
+- 새 패키지는 데이터가 비어 시작한다(옛 패키지 DB·동의는 옮기지 않음). 권한은 `pm grant --user 10 com.pplab.pleory …`로 다시 줬다.
 

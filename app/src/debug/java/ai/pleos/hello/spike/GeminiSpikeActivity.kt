@@ -14,7 +14,7 @@ import kotlinx.coroutines.withTimeoutOrNull
  * 공모전은 Gemini 로 확정(TRD D6). 플랫폼 LLM(Gleo AI)이 서드파티에 열리면 Pleos LLM SDK 로 전환한다
  * — 2026-11-08 기준 우리 프로젝트 토큰에는 LLM 엔드포인트 권한이 없다(gateway e:cloud:gateway:00401).
  * 보내는 것은 발화 텍스트뿐(원칙 4).
- * adb shell am start -n ai.pleos.hello/.spike.GeminiSpikeActivity ; adb logcat -s PleorySpike:I
+ * adb shell am start -n com.pplab.pleory/ai.pleos.hello.spike.GeminiSpikeActivity ; adb logcat -s PleorySpike:I
  */
 class GeminiSpikeActivity : Activity() {
 

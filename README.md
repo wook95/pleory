@@ -77,7 +77,7 @@ llm.geminiKey=<Gemini API key>
 ```bash
 ./gradlew assembleDebug
 adb install -r app/build/outputs/apk/debug/app-debug.apk
-adb shell am start -n ai.pleos.hello/.MainActivity
+adb shell am start -n com.pplab.pleory/ai.pleos.hello.MainActivity
 adb logcat -s PleoryFlow:I PleoryPlatform:I
 ```
 

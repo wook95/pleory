@@ -137,7 +137,7 @@ class ProtoActivity : Activity() {
 
 ```bash
 ./gradlew installDebug
-adb shell am start -W -S -n ai.pleos.hello/ai.pleos.hello.proto.ProtoActivity --es id <pkg>/r1/a
+adb shell am start -W -S -n com.pplab.pleory/ai.pleos.hello.proto.ProtoActivity --es id <pkg>/r1/a
 sleep 1
 adb exec-out screencap -p > prototypes/<slug>/rounds/r1/a.png
 ```

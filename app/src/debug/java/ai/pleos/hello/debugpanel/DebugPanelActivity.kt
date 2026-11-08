@@ -19,7 +19,7 @@ import java.io.File
 
 /**
  * platform/ 소스 확인용 디버그 패널.
- * adb shell am start -n ai.pleos.hello/.debugpanel.DebugPanelActivity ; adb logcat -s PleoryPlatform:I
+ * adb shell am start -n com.pplab.pleory/ai.pleos.hello.debugpanel.DebugPanelActivity ; adb logcat -s PleoryPlatform:I
  */
 class DebugPanelActivity : Activity() {
 

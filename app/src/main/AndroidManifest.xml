@@ -32,7 +32,7 @@
             </intent-filter>
             <!-- Gleo AI SHOW_TODAY_CARD(component=activity). 실측대로 패키지 접두 이름과 문서의 맨 이름을 함께 받는다 -->
             <intent-filter>
-                <action android:name="ai.pleos.hello.SHOW_TODAY_CARD" />
+                <action android:name="${applicationId}.SHOW_TODAY_CARD" />
                 <action android:name="SHOW_TODAY_CARD" />
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
@@ -47,9 +47,9 @@
             android:name=".gleo.GleoActionReceiver"
             android:exported="true">
             <intent-filter>
-                <action android:name="ai.pleos.hello.ADD_DRIVE_NOTE" />
+                <action android:name="${applicationId}.ADD_DRIVE_NOTE" />
                 <action android:name="ADD_DRIVE_NOTE" />
-                <action android:name="ai.pleos.hello.ADD_DRIVE_NOTES" />
+                <action android:name="${applicationId}.ADD_DRIVE_NOTES" />
             </intent-filter>
         </receiver>
     </application>

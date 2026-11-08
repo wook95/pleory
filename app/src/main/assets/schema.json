@@ -1,5 +1,5 @@
 {
-  "packageName": "ai.pleos.hello",
+  "packageName": "com.pplab.pleory",
   "appDescription": "A drive journal that saves spoken notes together with the current drive context.",
   "invokeWord": "플레오리",
   "version": "1.0.0",

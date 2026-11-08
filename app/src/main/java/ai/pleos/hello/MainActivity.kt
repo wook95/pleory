@@ -105,7 +105,7 @@ class MainActivity : Activity() {
      * 기어는 콜드 스타트 직후 아직 모를 수 있어 현재 기어를 한 번 읽은 뒤(직렬 경로) 판단한다.
      */
     private fun handleGleo(intent: Intent?) {
-        if (!GleoActionReceiver.isShowTodayCard(intent?.action)) return
+        if (!GleoActionReceiver.isShowTodayCard(intent?.action, packageName)) return
         app.sdkHub.gear.current {
             runOnUiThread {
                 val parked = app.gateAllowed()

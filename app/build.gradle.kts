@@ -17,7 +17,7 @@ android {
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "ai.pleos.hello"
+        applicationId = "com.pplab.pleory" // Kotlin 패키지·namespace 는 ai.pleos.hello 그대로
         minSdk = 28
         targetSdk = 34
         versionCode = 1

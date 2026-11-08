@@ -32,7 +32,7 @@ import ai.pleos.playground.tts.constant.Mode as TtsMode
 
 /**
  * 1일차 SDK 스파이크 (debug 전용). 기획 명세 §7 의 "(확인)" 항목을 에뮬레이터에서 직접 본다.
- * adb shell am start -n ai.pleos.hello/.spike.SpikeActivity ; adb logcat -s PleorySpike:I
+ * adb shell am start -n com.pplab.pleory/ai.pleos.hello.spike.SpikeActivity ; adb logcat -s PleorySpike:I
  */
 class SpikeActivity : Activity() {
 
@@ -123,7 +123,7 @@ class SpikeActivity : Activity() {
     private fun feed(s: SpeechToText, mode: SttMode, fromFile: Boolean) {
         if (!fromFile) { s.request(); return }
         // 마이크 대신 PCM(16kHz·16bit·mono). 문서상 sendAudio 는 ON_DEVICE 전용.
-        // adb push u.pcm /data/local/tmp/ && adb shell run-as ai.pleos.hello --user 10 cp /data/local/tmp/u.pcm files/
+        // adb push u.pcm /data/local/tmp/ && adb shell run-as com.pplab.pleory --user 10 cp /data/local/tmp/u.pcm files/
         val pcm = java.io.File(filesDir, "u.pcm").readBytes()
         Thread {
             pcm.asList().chunked(3_200).forEach { s.sendAudio(it.toByteArray()); Thread.sleep(100) }

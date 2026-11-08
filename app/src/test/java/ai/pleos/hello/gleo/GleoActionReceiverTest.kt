@@ -6,16 +6,18 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
+private const val PKG = "com.pplab.pleory"
+
 class GleoActionReceiverTest {
     @Test
     fun packagePrefixedActionsThatGleoSends() {
-        assertEquals("ADD_DRIVE_NOTE", GleoActionReceiver.functionOf("ai.pleos.hello.ADD_DRIVE_NOTE"))
-        assertEquals("ADD_DRIVE_NOTES", GleoActionReceiver.functionOf("ai.pleos.hello.ADD_DRIVE_NOTES"))
+        assertEquals("ADD_DRIVE_NOTE", GleoActionReceiver.functionOf("com.pplab.pleory.ADD_DRIVE_NOTE", PKG))
+        assertEquals("ADD_DRIVE_NOTES", GleoActionReceiver.functionOf("com.pplab.pleory.ADD_DRIVE_NOTES", PKG))
     }
 
     @Test
     fun documentedBareAction() {
-        assertEquals("ADD_DRIVE_NOTE", GleoActionReceiver.functionOf("ADD_DRIVE_NOTE"))
+        assertEquals("ADD_DRIVE_NOTE", GleoActionReceiver.functionOf("ADD_DRIVE_NOTE", PKG))
     }
 
     @Test
@@ -28,24 +30,31 @@ class GleoActionReceiverTest {
 
     @Test
     fun otherActionsRejected() {
-        assertNull(GleoActionReceiver.functionOf(null))
-        assertNull(GleoActionReceiver.functionOf("XADD_DRIVE_NOTE"))
-        assertNull(GleoActionReceiver.functionOf("ai.pleos.hello.DELETE_DRIVE_NOTE"))
+        assertNull(GleoActionReceiver.functionOf(null, PKG))
+        assertNull(GleoActionReceiver.functionOf("XADD_DRIVE_NOTE", PKG))
+        assertNull(GleoActionReceiver.functionOf("com.pplab.pleory.DELETE_DRIVE_NOTE", PKG))
     }
 
     @Test
     fun showTodayCardActionNames() {
-        assertTrue(GleoActionReceiver.isShowTodayCard("ai.pleos.hello.SHOW_TODAY_CARD"))
-        assertTrue(GleoActionReceiver.isShowTodayCard("SHOW_TODAY_CARD"))
-        assertFalse(GleoActionReceiver.isShowTodayCard("XSHOW_TODAY_CARD"))
-        assertFalse(GleoActionReceiver.isShowTodayCard(null))
+        assertTrue(GleoActionReceiver.isShowTodayCard("com.pplab.pleory.SHOW_TODAY_CARD", PKG))
+        assertTrue(GleoActionReceiver.isShowTodayCard("SHOW_TODAY_CARD", PKG))
+        assertFalse(GleoActionReceiver.isShowTodayCard("XSHOW_TODAY_CARD", PKG))
+        assertFalse(GleoActionReceiver.isShowTodayCard(null, PKG))
         // 메모 receiver 는 카드 액션을 받지 않는다
-        assertNull(GleoActionReceiver.functionOf("ai.pleos.hello.SHOW_TODAY_CARD"))
+        assertNull(GleoActionReceiver.functionOf("com.pplab.pleory.SHOW_TODAY_CARD", PKG))
     }
 
     @Test
     fun showTodayCardOpensOnlyWhileParked() {
         assertEquals("success", GleoActionReceiver.showTodayCardReply(parked = true).first)
         assertEquals("fail" to "The card is available only while parked.", GleoActionReceiver.showTodayCardReply(parked = false))
+    }
+
+    @Test
+    fun otherPackagePrefixRejected() {
+        // 이전 applicationId 나 다른 앱 접두는 받지 않는다
+        assertNull(GleoActionReceiver.functionOf("ai.pleos.hello.ADD_DRIVE_NOTE", PKG))
+        assertFalse(GleoActionReceiver.isShowTodayCard("ai.pleos.hello.SHOW_TODAY_CARD", PKG))
     }
 }
