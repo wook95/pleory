@@ -16,6 +16,9 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import java.io.File
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 /**
  * platform/ 소스 확인용 디버그 패널.
@@ -63,6 +66,7 @@ class DebugPanelActivity : Activity() {
             "데모 시나리오 무장(PCM, 경로 재생 대기)" to { DemoScenario.arm(app, viaText = false); log("demo armed pcm") },
             "데모 시나리오 무장(텍스트, STT 우회)" to { DemoScenario.arm(app, viaText = true); log("demo armed text") },
             "데모 초기화(가짜 입력·DemoClock 해제)" to { DemoScenario.reset(app); log("demo reset") },
+            "지난 기록 시드(지난 세션 6건, S2 확인용)" to { seedHistory() },
             "TTS 적어뒀어" to { hub.speechOutput.say("적어뒀어"); log("tts say") },
             "UX 제한 강제 ON (디버그 오버라이드)" to { hub.setUxOverride(true); log("ux override ON") },
             "UX 제한 강제 OFF (디버그 오버라이드)" to { hub.setUxOverride(false); log("ux override OFF") },
@@ -91,6 +95,16 @@ class DebugPanelActivity : Activity() {
         log("text utterance ${i + 1} queued, TalkTapped")
     }
 
+    /** Room 쿼리는 메인 스레드에서 못 돌리므로 IO 에서. */
+    private fun seedHistory(onDone: () -> Unit = {}) {
+        val app = app
+        CoroutineScope(Dispatchers.IO).launch {
+            runCatching { HistorySeed.seed(app) }.onFailure { Log.e(TAG, "history seed failed", it) }
+            runOnUiThread(onDone)
+        }
+        log("history seed queued")
+    }
+
     private fun sdkStates() = log(
         "sdk vehicle=${hub.vehicleState.value} ux=${hub.uxRestrictionsState.value} navi=${hub.naviState.value} " +
             "location=${hub.locationState.value} stt=${hub.sttState.value} tts=${hub.ttsState.value}",
@@ -114,6 +128,10 @@ class DebugPanelActivity : Activity() {
         if (intent.getStringExtra("action") == "ux") { // adb 용 UX 제한 강제: --es action ux --es ux on|off|none
             hub.setUxOverride(when (intent.getStringExtra("ux")) { "on" -> true; "off" -> false; else -> null })
             finish()
+            return
+        }
+        if (intent.getStringExtra("action") == "seed-history") { // adb 용: --es action seed-history
+            seedHistory { finish() } // 다 넣은 뒤 닫는다 — 먼저 닫으면 태스크와 함께 프로세스가 내려가 중간에 끊긴다
             return
         }
         if (intent.getStringExtra("action") != "demo") return
