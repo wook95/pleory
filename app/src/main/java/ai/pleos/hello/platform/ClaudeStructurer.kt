@@ -17,12 +17,16 @@ import com.anthropic.models.messages.ThinkingConfigDisabled
 import java.io.InterruptedIOException
 import java.net.ConnectException
 import java.net.UnknownHostException
+import android.os.SystemClock
 import java.time.Duration
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.CompletionException
 import java.util.concurrent.ExecutionException
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.future.await
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
@@ -32,6 +36,7 @@ import kotlinx.coroutines.withContext
  * - 키가 비어 있으면 [available] 이 false — 체인이 건너뛴다.
  * - 재시도하지 않는다(maxRetries 0). 실패하면 체인이 Gemini 로 넘어간다.
  * - 코루틴이 취소되면 진행 중인 요청 future 도 취소된다. 늦은 응답은 버려진다.
+ * - 클라이언트는 하나만 만든다. 첫 한마디가 클라이언트 생성·첫 TLS 연결에 4.5초를 다 쓰지 않게 [warmUp] 으로 미리 데운다.
  * - Error 메시지는 로그용 분류만 담는다("claude http 429", "claude refusal" 등). 본문·발화·키는 넣지 않는다.
  */
 class ClaudeStructurer(
@@ -41,12 +46,37 @@ class ClaudeStructurer(
 
     val available: Boolean get() = apiKey.isNotBlank()
 
+    /** 한 번만 만든다. 데우는 중에 구조화가 오면 같은 초기화를 기다린다(lazy 동기화). */
     private val client: AnthropicClient by lazy {
         AnthropicOkHttpClient.builder()
             .apiKey(apiKey)
             .maxRetries(0)
             .timeout(Duration.ofMillis(timeoutMs))
             .build()
+    }
+
+    private val warming = AtomicBoolean(false)
+
+    /**
+     * 클라이언트를 만들고 과금되지 않는 모델 조회(models.retrieve, 발화 없음)로 연결을 미리 연다. 블로킹하지 않고 한 번만 돈다.
+     * 동의가 있을 때만 부른다(호출 쪽 책임). 실패하면 다음 호출에서 다시 데울 수 있다.
+     */
+    fun warmUp(scope: CoroutineScope, log: (String) -> Unit) {
+        if (!available || !warming.compareAndSet(false, true)) return
+        scope.launch(Dispatchers.IO) {
+            val t0 = SystemClock.elapsedRealtime()
+            try {
+                client.models().retrieve(MODEL)
+                log("claude warm ok ${SystemClock.elapsedRealtime() - t0}ms")
+            } catch (e: CancellationException) {
+                warming.set(false)
+                throw e
+            } catch (e: Exception) {
+                warming.set(false)
+                val r = classify(unwrap(e))
+                log("claude warm failed ${(r as? StructurerResult.Error)?.message ?: "network unavailable"}")
+            }
+        }
     }
 
     override suspend fun structure(text: String): StructurerResult {

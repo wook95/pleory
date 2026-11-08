@@ -150,13 +150,20 @@ class PleoryApp : Application() {
         // 시동 = 앱 세션 시작(D11). 이전 PENDING 발화는 새 세션 뒤에 재처리한다.
         controller.post(SessionEvent.IgnitionOn)
         wireArrival()
+        warmLlm()
         controller.reprocessPending()
         startLocationIfPermitted()
     }
 
+    private val claude = ClaudeStructurer(timeoutMs = CLAUDE_BUDGET_MS)
+
+    /** 동의가 있으면 Claude 클라이언트·연결을 미리 데운다(요청에 발화 없음). 앱 시작과 동의 직후에 부른다. 여러 번 불러도 한 번만 돈다. */
+    fun warmLlm() {
+        if (consent.llmAllowed) claude.warmUp(appScope) { Log.i(FLOW_TAG, it) }
+    }
+
     /** Claude 키가 있으면 Claude 4.5초 → Gemini 나머지(약 3.4초), 없으면 Gemini 단독으로 8초. */
     private fun llmChain(): FallbackStructurer {
-        val claude = ClaudeStructurer(timeoutMs = CLAUDE_BUDGET_MS)
         val gemini = GeminiStructurer(budgetMs = if (claude.available) GEMINI_AFTER_CLAUDE_MS else 8_000)
         return FallbackStructurer(
             listOf(

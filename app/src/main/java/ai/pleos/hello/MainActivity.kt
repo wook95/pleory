@@ -77,7 +77,7 @@ class MainActivity : Activity() {
             onDeleteItem = { id -> if (app.gateAllowed()) app.controller.deleteItem(id) },
         ).apply { visibility = View.GONE }
         // 동의는 두 버튼만 인정한다. 뒤로 가기·자동 수락은 동의로 치지 않는다.
-        consentView = ConsentView(this, onAgree = { answer { it.grant(app.clock.nowMillis()) } }, onDecline = { answer { it.decline(app.clock.nowMillis()) } })
+        consentView = ConsentView(this, onAgree = { answer { it.grant(app.clock.nowMillis()) }; app.warmLlm() }, onDecline = { answer { it.decline(app.clock.nowMillis()) } })
             .apply { visibility = View.GONE }
         settingsView = SettingsView(
             this,
