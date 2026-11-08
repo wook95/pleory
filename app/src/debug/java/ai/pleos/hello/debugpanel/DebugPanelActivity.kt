@@ -6,7 +6,9 @@ import ai.pleos.hello.platform.Gear
 import ai.pleos.hello.platform.LocationFix
 import ai.pleos.hello.platform.NaviListener
 import ai.pleos.hello.core.SessionEvent
+import ai.pleos.hello.MainActivity
 import android.app.Activity
+import android.content.Intent
 import android.os.Bundle
 import android.util.Log
 import android.widget.Button
@@ -54,6 +56,13 @@ class DebugPanelActivity : Activity() {
             "STT PCM 주입(파이프라인)" to ::sttFromPcm,
             "DemoClock ON ${DEMO_SPEED.toInt()}x (18:40 시작)" to { app.clock.setDemo(DEMO_SPEED); log("DemoClock ON ${DEMO_SPEED}x now=${app.clock.nowMillis()}") },
             "DemoClock OFF" to { app.clock.setDemo(null); log("DemoClock OFF now=${app.clock.nowMillis()}") },
+            "목적지 집 설정(가짜 Known)" to { hub.setNaviOverride(DemoScenario.FAKE_HOME); log("fake destination ${DemoScenario.FAKE_HOME}") },
+            "도착 강제(Arrived)" to { hub.emitFakeArrived(); log("fake Arrived") },
+            "텍스트 발화 주입 1" to { textUtterance(0) },
+            "텍스트 발화 주입 2" to { textUtterance(1) },
+            "데모 시나리오 무장(PCM, 경로 재생 대기)" to { DemoScenario.arm(app, viaText = false); log("demo armed pcm") },
+            "데모 시나리오 무장(텍스트, STT 우회)" to { DemoScenario.arm(app, viaText = true); log("demo armed text") },
+            "데모 초기화(가짜 입력·DemoClock 해제)" to { DemoScenario.reset(app); log("demo reset") },
             "TTS 적어뒀어" to { hub.speechOutput.say("적어뒀어"); log("tts say") },
             "UX 제한 상태" to { log("ux required=${hub.uxRestrictions.isDistractionOptimizationRequired}") },
         ).forEach { (label, action) ->
@@ -66,10 +75,17 @@ class DebugPanelActivity : Activity() {
         col.addView(out)
         setContentView(ScrollView(this).apply { addView(col) })
 
+        handleIntent()
         hub.gear.addListener(gearListener)
         hub.uxRestrictions.addListener(uxListener)
         hub.location.addListener(locationListener)
         hub.navi.addListener(naviListener)
+    }
+
+    private fun textUtterance(i: Int) {
+        app.speechInput.pendingText = TEXTS[i]
+        app.controller.post(SessionEvent.TalkTapped)
+        log("text utterance ${i + 1} queued, TalkTapped")
     }
 
     private fun sdkStates() = log(
@@ -83,6 +99,21 @@ class DebugPanelActivity : Activity() {
         app.speechInput.pendingPcm = f.readBytes()
         app.controller.post(SessionEvent.TalkTapped)
         log("stt pcm queued ${f.length()}B, TalkTapped")
+    }
+
+    /** tools/run-demo.sh 용: `--es action demo [--es mode text] [--ef speed 30]` 이면 시나리오를 무장하고 메인 화면으로 넘어간다. */
+    private fun handleIntent() {
+        if (intent.getStringExtra("action") == "gear") { // adb 용 가짜 기어: --es action gear --es gear P|D|none
+            hub.setGearOverride(when (intent.getStringExtra("gear")) { "P" -> Gear.P; "D" -> Gear.D; else -> null })
+            finish()
+            return
+        }
+        if (intent.getStringExtra("action") != "demo") return
+        val viaText = intent.getStringExtra("mode") == "text"
+        val speed = intent.getFloatExtra("speed", DemoScenario.DEFAULT_SPEED.toFloat()).toDouble()
+        DemoScenario.arm(app, viaText, speed)
+        startActivity(Intent(this, MainActivity::class.java))
+        finish()
     }
 
     private fun log(msg: String) {
@@ -102,5 +133,6 @@ class DebugPanelActivity : Activity() {
         const val TAG = "PleoryPlatform"
         const val MAX_POINTS = 5
         const val DEMO_SPEED = 25.0
+        val TEXTS = listOf("오늘 팀장 때문에 진짜 힘들었다", "내일 거래처 서류 다시 보내야 해 아 노을 예쁘다")
     }
 }

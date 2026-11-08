@@ -1,6 +1,7 @@
 package ai.pleos.hello.app
 
 import ai.pleos.hello.core.Clock
+import ai.pleos.hello.core.EndInfo
 import ai.pleos.hello.core.GeoPoint
 import ai.pleos.hello.core.SegmentRule
 import ai.pleos.hello.core.TrackAccumulator
@@ -8,7 +9,9 @@ import ai.pleos.hello.core.TrackMath
 import ai.pleos.hello.core.TrackSample
 import ai.pleos.hello.data.Segment
 import ai.pleos.hello.platform.LocationFix
+import ai.pleos.hello.platform.DestinationState
 import ai.pleos.hello.platform.LocationSource
+import ai.pleos.hello.platform.NaviSource
 import java.util.Calendar
 
 /**
@@ -18,14 +21,17 @@ import java.util.Calendar
 class LiveContextProvider(
     private val location: LocationSource,
     private val clock: Clock,
+    private val navi: NaviSource? = null,
     private val profileId: String = "local",
 ) : ContextProvider {
 
-    private val track = TrackAccumulator()
+    private var track = TrackAccumulator()
+    private val samples = ArrayList<TrackSample>()
     private var last: LocationFix? = null
 
     private val listener: (LocationFix) -> Unit = { fix ->
-        track.add(TrackSample(clock.nowMillis(), fix.lat, fix.lng))
+        val sample = TrackSample(clock.nowMillis(), fix.lat, fix.lng)
+        if (track.add(sample)) samples += sample
         last = fix
     }
 
@@ -34,6 +40,31 @@ class LiveContextProvider(
     }
 
     override fun profileId() = profileId
+
+    /** 세션별로 비운다. 마지막으로 안 위치가 있으면 새 세션의 출발점으로 넣는다. */
+    override fun onSessionStart() {
+        track = TrackAccumulator()
+        samples.clear()
+        last?.let {
+            val sample = TrackSample(clock.nowMillis(), it.lat, it.lng)
+            track.add(sample)
+            samples += sample
+        }
+    }
+
+    override fun endInfo(): EndInfo {
+        val first = samples.firstOrNull()?.let { GeoPoint(it.lat, it.lng) }
+        val end = samples.lastOrNull()?.let { GeoPoint(it.lat, it.lng) }
+        val dest = navi?.destination as? DestinationState.Known
+        return EndInfo(
+            track = track.summary(),
+            points = samples.toList(),
+            originLabel = first?.let(PlaceFixture::label),
+            destLabel = dest?.name ?: end?.let(PlaceFixture::label),
+            destPoint = dest?.let { GeoPoint(it.lat, it.lng) } ?: end,
+            weather = WEATHER_FIXTURE,
+        )
+    }
 
     override fun segment(): Segment {
         val hour = Calendar.getInstance().apply { timeInMillis = clock.nowMillis() }.get(Calendar.HOUR_OF_DAY)
@@ -53,6 +84,9 @@ class LiveContextProvider(
         )
     }
 }
+
+/** 2일 데모는 날씨 API 대신 고정값(PRD §7). */
+private const val WEATHER_FIXTURE = "비"
 
 /** PLACEHOLDER(E1 임시): tools/demo-route.gpx 의 합성 경로용 좌표→라벨 표. 기획자가 실제 fixture 를 주면 교체한다. */
 object PlaceFixture {

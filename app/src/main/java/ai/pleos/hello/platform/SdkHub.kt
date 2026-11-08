@@ -37,13 +37,14 @@ class SdkHub(private val context: Context) {
     private val pleosGear = PleosGearSource(post)
     private val fakeableGear = FakeableGearSource(pleosGear)
     private val pleosNavi = PleosNaviSource(context, post)
+    private val fakeableNavi = FakeableNaviSource(pleosNavi)
     private val pleosLocation = PleosLocationSource(context, post)
     private val pleosSpeechInput = PleosSpeechInput(context, post)
     private val pleosSpeechOutput = PleosSpeechOutput(context, post)
     private val carUx = CarUxRestrictionsSource(post)
 
     val gear: GearSource = fakeableGear
-    val navi: NaviSource = pleosNavi
+    val navi: NaviSource = fakeableNavi
     val location: LocationSource = pleosLocation
     val speechInput: SpeechInput = pleosSpeechInput
     val speechOutput: SpeechOutput = pleosSpeechOutput
@@ -57,6 +58,16 @@ class SdkHub(private val context: Context) {
     /** 디버그 전용: 가짜 기어를 내보낸다. null 이면 실제 기어로 돌아간다. */
     fun setGearOverride(g: Gear?) {
         handler.post { fakeableGear.setOverride(g) }
+    }
+
+    /** 디버그 전용: 가짜 목적지를 내보낸다. null 이면 실제 내비로 돌아간다. */
+    fun setNaviOverride(s: DestinationState?) {
+        handler.post { fakeableNavi.setOverride(s) }
+    }
+
+    /** 디버그 전용: 내비 도착 이벤트를 강제로 내보낸다. */
+    fun emitFakeArrived() {
+        handler.post { fakeableNavi.emitArrived() }
     }
 
     fun start() {

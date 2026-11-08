@@ -1,6 +1,10 @@
 package ai.pleos.hello.data
 
+import ai.pleos.hello.core.CardModel
+import ai.pleos.hello.core.CardModelBuilder
+import ai.pleos.hello.core.SessionEnd
 import ai.pleos.hello.core.StructuredItem
+import ai.pleos.hello.core.TrackSample
 
 /** 파이프라인이 쓰는 저장소 경계. JVM 테스트는 가짜로 바꾼다. */
 interface PleoryStore {
@@ -14,6 +18,13 @@ interface PleoryStore {
     /** 기존 Item 삭제 + 새 Item 삽입 + llmStatus 갱신을 한 트랜잭션으로. */
     suspend fun replaceItems(utteranceId: Long, items: List<StructuredItem>, status: LlmStatus)
     suspend fun setLlmStatus(utteranceId: Long, status: LlmStatus)
+
+    /** 카드 표시 시점의 종료값과 궤적을 Session 행에 쓰고 state 를 CARD 로 바꾼다(T8). */
+    suspend fun finishSession(sessionId: Long, endedAt: Long, end: SessionEnd, track: List<TrackSample>) {}
+    suspend fun setSummaryText(sessionId: Long, text: String) {}
+
+    /** 카드 표시용 모델. 구조화가 안 끝난 발화는 원문 한 줄로 들어간다. */
+    suspend fun loadCard(sessionId: Long): CardModel? = null
 }
 
 class RoomPleoryStore(private val db: PleoryDb) : PleoryStore {
@@ -40,4 +51,29 @@ class RoomPleoryStore(private val db: PleoryDb) : PleoryStore {
     }
 
     override suspend fun setLlmStatus(utteranceId: Long, status: LlmStatus) = db.utterances().setStatus(utteranceId, status)
+
+    override suspend fun finishSession(sessionId: Long, endedAt: Long, end: SessionEnd, track: List<TrackSample>) {
+        val dao = db.sessions()
+        val s = dao.get(sessionId) ?: return
+        dao.update(
+            s.copy(
+                endedAt = endedAt, segment = end.segment, originLabel = end.originLabel, destLabel = end.destLabel,
+                startLat = end.startLat, startLng = end.startLng, endLat = end.endLat, endLng = end.endLng,
+                distanceKm = end.distanceKm, durationMin = end.durationMin, weather = end.weather,
+                congestionMin = end.congestionMin, state = SessionState.CARD,
+            ),
+        )
+        db.trackPoints().insertAll(track.map { TrackPoint(sessionId, it.atMillis, it.lat, it.lng, 0) })
+    }
+
+    override suspend fun setSummaryText(sessionId: Long, text: String) {
+        val dao = db.sessions()
+        dao.get(sessionId)?.let { dao.update(it.copy(summaryText = text)) }
+    }
+
+    override suspend fun loadCard(sessionId: Long): CardModel? {
+        val session = db.sessions().get(sessionId) ?: return null
+        val utterances = db.utterances().bySession(sessionId).map { it to db.items().byUtterance(it.id) }
+        return CardModelBuilder.build(session, utterances, db.trackPoints().bySession(sessionId))
+    }
 }

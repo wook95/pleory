@@ -6,18 +6,26 @@ import ai.pleos.hello.app.SessionController
 import ai.pleos.hello.app.SessionOutputs
 import ai.pleos.hello.core.Clock
 import ai.pleos.hello.core.DemoClock
+import ai.pleos.hello.core.DestinationState as CoreDestination
+import ai.pleos.hello.core.GeoPoint
 import ai.pleos.hello.core.SessionEvent
+import ai.pleos.hello.core.SessionState
 import ai.pleos.hello.core.SystemClock
+import ai.pleos.hello.core.TrackMath
 import ai.pleos.hello.data.PleoryDb
 import ai.pleos.hello.data.RoomPleoryStore
 import ai.pleos.hello.data.Segment
 import ai.pleos.hello.data.Session
 import ai.pleos.hello.platform.GeminiStructurer
-import ai.pleos.hello.platform.SdkHub
+import ai.pleos.hello.platform.DestinationState
 import ai.pleos.hello.platform.Gear
+import ai.pleos.hello.platform.NaviListener
+import ai.pleos.hello.platform.SdkHub
 import android.Manifest
 import android.app.Application
 import android.content.pm.PackageManager
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import java.util.Calendar
 import kotlinx.coroutines.CoroutineScope
@@ -59,6 +67,7 @@ class PleoryApp : Application() {
     lateinit var controller: SessionController
         private set
     val clock = AppClock()
+    val outputs = AppOutputs()
     lateinit var speechInput: PcmInjectableSpeechInput
         private set
 
@@ -80,22 +89,70 @@ class PleoryApp : Application() {
             structurer = GeminiStructurer(),
             speechIn = speechInput,
             speechOut = sdkHub.speechOutput,
-            outputs = LoggingOutputs(),
-            context = LiveContextProvider(sdkHub.location, clock),
+            outputs = outputs,
+            context = LiveContextProvider(sdkHub.location, clock, sdkHub.navi),
             clock = clock,
             dispatcher = sdkHub.handler.asCoroutineDispatcher(), // SdkHub 직렬 경로(메인 루퍼)와 같은 스레드
             trace = { Log.i(FLOW_TAG, it) },
         )
-        sdkHub.speechOutput.onDone = { Log.i(FLOW_TAG, "tts onDone") }
         sdkHub.gear.addListener { g -> gearEvent(g) }
         sdkHub.gear.current { g -> if (g != null) gearEvent(g) }
         // 시동 = 앱 세션 시작(D11). 이전 PENDING 발화는 새 세션 뒤에 재처리한다.
         controller.post(SessionEvent.IgnitionOn)
+        wireArrival()
         controller.reprocessPending()
         startLocationIfPermitted()
     }
 
+    /**
+     * 도착 판정 입력(TRD D9)을 상태 머신에 잇는다: 목적지 변경, 내비 도착 이벤트,
+     * 알려진 목적지 300m 이내의 최신 위치, 기어 P 5초 유지는 gearEvent 에서.
+     */
+    private fun wireArrival() {
+        sdkHub.navi.addListener(object : NaviListener {
+            override fun onDestination(state: DestinationState) {
+                Log.i(FLOW_TAG, "destination $state")
+                controller.post(SessionEvent.DestinationChanged(state.toCore()))
+            }
+
+            override fun onArrived() {
+                Log.i(FLOW_TAG, "navi arrived")
+                controller.post(SessionEvent.Arrived)
+            }
+        })
+        controller.post(SessionEvent.DestinationChanged(sdkHub.navi.destination.toCore()))
+        sdkHub.location.addListener { fix ->
+            if (controller.state == SessionState.CARD) return@addListener
+            val dest = sdkHub.navi.destination as? DestinationState.Known ?: return@addListener
+            if (TrackMath.distanceMeters(GeoPoint(fix.lat, fix.lng), GeoPoint(dest.lat, dest.lng)) <= ARRIVAL_RADIUS_M) {
+                controller.post(SessionEvent.LocationNearDest)
+            }
+        }
+    }
+
+    private fun DestinationState.toCore(): CoreDestination = when (this) {
+        DestinationState.Unknown -> CoreDestination.Unknown
+        DestinationState.None -> CoreDestination.None
+        is DestinationState.Known -> CoreDestination.Known
+    }
+
+    private val parkHandler = Handler(Looper.getMainLooper())
+    private val parkHeld = Runnable {
+        Log.i(FLOW_TAG, "gear P held 5s")
+        controller.post(SessionEvent.ParkHeld5s)
+    }
+    private var parkScheduled = false
+
     private fun gearEvent(g: Gear) {
+        if (g == Gear.P) {
+            if (!parkScheduled) {
+                parkScheduled = true
+                parkHandler.postDelayed(parkHeld, PARK_HOLD_MS)
+            }
+        } else {
+            parkScheduled = false
+            parkHandler.removeCallbacks(parkHeld)
+        }
         val core = when (g) {
             Gear.P -> ai.pleos.hello.core.Gear.P
             Gear.D -> ai.pleos.hello.core.Gear.D
@@ -112,15 +169,24 @@ class PleoryApp : Application() {
         if (ok) sdkHub.handler.post { sdkHub.location.start() }
     }
 
-    /** T8 에서 S1 카드·요약 재생으로 교체한다. 지금은 로그만 남기고 요약은 즉시 끝난 것으로 본다. */
-    private inner class LoggingOutputs : SessionOutputs {
+    /** 화면 쪽 알림. 화면 전환은 컨트롤러 상태 변화로 하고, 카드 갱신과 요약 자막만 여기서 전한다. */
+    class AppOutputs : SessionOutputs {
+        interface Ui {
+            fun refreshCard()
+            fun summaryStarted(text: String)
+            fun summaryEnded()
+        }
+
+        @Volatile
+        var ui: Ui? = null
+
         override fun showS0() { Log.i(FLOW_TAG, "output showS0") }
         override fun showCard() { Log.i(FLOW_TAG, "output showCard") }
-        override fun startSummary() {
-            Log.i(FLOW_TAG, "output startSummary")
-            controller.post(SessionEvent.SummaryDone)
-        }
+        override fun startSummary() { Log.i(FLOW_TAG, "output startSummary") }
         override fun stopSummary() { Log.i(FLOW_TAG, "output stopSummary") }
+        override fun refreshCard() { ui?.refreshCard() }
+        override fun summaryStarted(text: String) { ui?.summaryStarted(text) }
+        override fun summaryEnded() { ui?.summaryEnded() }
     }
 
     /** Session 한 줄을 넣고 다시 읽은 뒤 지운다. */
@@ -138,6 +204,8 @@ class PleoryApp : Application() {
 
     companion object {
         const val FLOW_TAG = "PleoryFlow"
+        private const val ARRIVAL_RADIUS_M = 300.0
+        private const val PARK_HOLD_MS = 5_000L
         val LOCATION_PERMISSIONS = arrayOf(
             Manifest.permission.ACCESS_FINE_LOCATION,
             Manifest.permission.ACCESS_COARSE_LOCATION,

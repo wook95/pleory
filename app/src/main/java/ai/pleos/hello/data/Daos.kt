@@ -5,11 +5,13 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Transaction
+import androidx.room.Update
 
 @Dao
 interface SessionDao {
     @Insert suspend fun insert(session: Session): Long
     @Query("SELECT * FROM session WHERE id = :id") suspend fun get(id: Long): Session?
+    @Update suspend fun update(session: Session)
     @Query("DELETE FROM session WHERE id = :id") suspend fun delete(id: Long)
     @Query("UPDATE session SET state = :state WHERE id = :id") suspend fun setState(id: Long, state: SessionState)
     @Query("UPDATE session SET state = :state, endedAt = :endedAt WHERE id = :id")
@@ -47,6 +49,7 @@ abstract class ItemDao {
 @Dao
 interface TrackPointDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun insert(point: TrackPoint)
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun insertAll(points: List<TrackPoint>)
     @Query("SELECT * FROM track_point WHERE sessionId = :sessionId ORDER BY at")
     suspend fun bySession(sessionId: Long): List<TrackPoint>
 }

@@ -2,6 +2,8 @@ package ai.pleos.hello.app
 
 import ai.pleos.hello.platform.SpeechInput
 import ai.pleos.hello.platform.SpeechInputListener
+import android.os.Handler
+import android.os.Looper
 
 /**
  * 디버그 주입용 래퍼. [pendingPcm] 이 있으면 다음 start() 에서 마이크 대신 그 PCM 을 STT 로 보낸다.
@@ -11,16 +13,28 @@ class PcmInjectableSpeechInput(private val real: SpeechInput) : SpeechInput {
     @Volatile
     var pendingPcm: ByteArray? = null
 
+    /** 디버그 주입용. 있으면 다음 start() 가 STT 를 건너뛰고 이 문장을 인식 결과(final)로 돌려준다. */
+    @Volatile
+    var pendingText: String? = null
+
     override var listener: SpeechInputListener?
         get() = real.listener
         set(value) { real.listener = value }
 
     override fun start(round: Int) {
         val pcm = pendingPcm
+        val text = pendingText
         pendingPcm = null
-        if (pcm != null) real.startFromPcm(pcm, round) else real.start(round)
+        pendingText = null
+        if (text != null) {
+            Handler(Looper.getMainLooper()).postDelayed({ listener?.onFinal(text, round) }, TEXT_DELAY_MS)
+        } else if (pcm != null) real.startFromPcm(pcm, round) else real.start(round)
     }
 
     override fun startFromPcm(bytes: ByteArray, round: Int) = real.startFromPcm(bytes, round)
     override fun cancel() = real.cancel()
+
+    private companion object {
+        const val TEXT_DELAY_MS = 300L
+    }
 }

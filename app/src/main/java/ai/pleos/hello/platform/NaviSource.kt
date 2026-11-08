@@ -98,4 +98,30 @@ class PleosNaviSource(context: Context, private val post: Post) : NaviSource {
     override fun removeListener(l: NaviListener) = listeners.remove(l)
 }
 
+/** 디버그용 덮어쓰기. override 가 있으면 실제 내비 이벤트는 흘리지 않는다. 직렬 경로에서만 호출. */
+class FakeableNaviSource(private val real: NaviSource) : NaviSource {
+    private val listeners = Listeners<NaviListener>()
+    private var fake: DestinationState? = null
+
+    init {
+        real.addListener(object : NaviListener {
+            override fun onDestination(state: DestinationState) { if (fake == null) listeners.forEach { it.onDestination(state) } }
+            override fun onArrived() { if (fake == null) listeners.forEach { it.onArrived() } }
+        })
+    }
+
+    override val destination: DestinationState get() = fake ?: real.destination
+
+    fun setOverride(state: DestinationState?) {
+        fake = state
+        listeners.forEach { it.onDestination(destination) }
+    }
+
+    fun emitArrived() = listeners.forEach { it.onArrived() }
+
+    override fun refresh() { if (fake == null) real.refresh() }
+    override fun addListener(l: NaviListener) = listeners.add(l)
+    override fun removeListener(l: NaviListener) = listeners.remove(l)
+}
+
 private const val TAG = "PleoryPlatform"

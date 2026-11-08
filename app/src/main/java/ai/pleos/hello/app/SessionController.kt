@@ -1,18 +1,21 @@
 package ai.pleos.hello.app
 
+import ai.pleos.hello.core.CardModel
 import ai.pleos.hello.core.Clock
 import ai.pleos.hello.core.SessionCommand
 import ai.pleos.hello.core.SessionEvent
 import ai.pleos.hello.core.SessionState
+import ai.pleos.hello.core.SessionEndCalc
 import ai.pleos.hello.core.SessionStateMachine
 import ai.pleos.hello.core.StructureContract
 import ai.pleos.hello.core.StructureResult
 import ai.pleos.hello.core.StructuredItem
 import ai.pleos.hello.core.Structurer
 import ai.pleos.hello.core.StructurerResult
+import ai.pleos.hello.core.SummaryComposer
+import ai.pleos.hello.core.SummaryItem
 import ai.pleos.hello.data.LlmStatus
 import ai.pleos.hello.data.PleoryStore
-import ai.pleos.hello.data.SessionState as DbSessionState
 import ai.pleos.hello.data.Utterance
 import ai.pleos.hello.platform.SpeechInput
 import ai.pleos.hello.platform.SpeechInputListener
@@ -32,6 +35,15 @@ interface SessionOutputs {
     fun showCard()
     fun startSummary()
     fun stopSummary()
+
+    /** 구조화 결과가 저장돼 카드를 다시 읽어야 할 때. */
+    fun refreshCard() {}
+
+    /** 요약 재생이 시작됐다. [text] 는 TTS 로 읽는 문장이자 자막. */
+    fun summaryStarted(text: String) {}
+
+    /** 요약 재생이 끝났다(끝까지·건너뛰기·15초 상한·기어 D 중단 모두). */
+    fun summaryEnded() {}
 }
 
 /**
@@ -62,8 +74,19 @@ class SessionController(
     private val machine = SessionStateMachine()
     private val entries = mutableMapOf<Long, Entry>()
     private var sessionId = CompletableDeferred<Long>()
+    private var sessionStartedAt = 0L
+    private var cardJob: Job? = null
+    private var sttTimeoutJob: Job? = null
+    private var sttTimeoutRound = -1
+    private var summarySeq = 0
+    private var summaryJob: Job? = null
+    private var summarySpeaking = false
 
     val state: SessionState get() = machine.state
+
+    /** 요약을 재생 중이면 그 문장(자막), 아니면 null. 직렬 경로에서만 읽는다. */
+    var summaryText: String? = null
+        private set
 
     /** 이벤트 처리 직후 현재 상태를 알린다(UI 갱신용). 직렬 경로에서 불린다. */
     var onStateChanged: ((SessionState) -> Unit)? = null
@@ -73,12 +96,25 @@ class SessionController(
             override fun onFinal(text: String, round: Int) = post(SessionEvent.SttFinal(text, round))
             override fun onError(message: String, round: Int) = post(SessionEvent.SttFailed(round))
         }
+        speechOut.onDone = {
+            scope.launch {
+                trace("tts onDone")
+                if (summarySpeaking) endSummary(stopSpeech = false, notifyDone = true)
+            }
+        }
     }
 
     /** 어느 스레드에서든 호출 가능. 직렬 경로로 넘긴다. */
     fun post(event: SessionEvent) {
         scope.launch {
             trace("event $event")
+            // 끝난 회차의 STT 상한 타이머가 남아 있지 않게 한다(다른 회차의 타이머는 건드리지 않는다).
+            val endedRound = when (event) {
+                is SessionEvent.SttFinal -> event.round
+                is SessionEvent.SttFailed -> event.round
+                else -> -1
+            }
+            if (endedRound == sttTimeoutRound) cancelSttTimeout()
             run(machine.handle(event))
             onStateChanged?.invoke(machine.state)
         }
@@ -100,6 +136,27 @@ class SessionController(
         }
     }
 
+    /** 카드의 "건너뛰기". 재생 중일 때만 의미가 있다. */
+    fun skipSummary() {
+        scope.launch {
+            if (summaryText != null) {
+                trace("summary skipped")
+                endSummary(stopSpeech = true, notifyDone = true)
+            }
+        }
+    }
+
+    /** 카드의 "15초 요약 듣기". 카드 상태에서 재생 중이 아닐 때만 다시 읽는다. */
+    fun replaySummary() {
+        scope.launch { if (machine.state == SessionState.CARD && summaryText == null) playSummary() }
+    }
+
+    /** 카드 표시용 모델. 종료값 저장이 끝난 뒤에 읽는다. */
+    suspend fun loadCard(): CardModel? {
+        cardJob?.join()
+        return store.loadCard(sessionId.await())
+    }
+
     fun shutdown() {
         scope.coroutineContext[Job]?.cancel()
     }
@@ -114,12 +171,17 @@ class SessionController(
             SessionCommand.StopSpeech -> speechOut.stop()
             is SessionCommand.StartStt -> {
                 speechIn.start(c.round)
-                scope.launch {
+                cancelSttTimeout()
+                sttTimeoutRound = c.round
+                sttTimeoutJob = scope.launch {
                     delay(sttTimeoutMs)
                     post(SessionEvent.SttTimeout(c.round))
                 }
             }
-            is SessionCommand.CancelStt -> speechIn.cancel()
+            is SessionCommand.CancelStt -> {
+                if (c.round == sttTimeoutRound) cancelSttTimeout()
+                speechIn.cancel()
+            }
             is SessionCommand.Say -> speechOut.say(c.text)
             is SessionCommand.SaveUtterance -> {
                 val entry = Entry(c.text, CompletableDeferred())
@@ -159,21 +221,40 @@ class SessionController(
             is SessionCommand.CommitStructure -> commit(c.utteranceId, LlmStatus.DONE)
             is SessionCommand.CommitRaw -> commit(c.utteranceId, LlmStatus.FAILED)
             is SessionCommand.KeepPending -> Unit // PENDING 은 저장 시점의 값이 그대로 유지된다
-            SessionCommand.ShowS0 -> outputs.showS0()
-            SessionCommand.ShowCard -> {
-                outputs.showCard()
-                val session = sessionId
-                scope.launch { store.setSessionState(session.await(), DbSessionState.CARD) }
+            SessionCommand.ShowS0 -> {
+                endSummary(stopSpeech = true, notifyDone = false)
+                outputs.showS0()
             }
-            SessionCommand.StartSummary -> outputs.startSummary()
-            SessionCommand.StopSummary -> outputs.stopSummary()
+            SessionCommand.ShowCard -> {
+                val session = sessionId
+                val endedAt = clock.nowMillis()
+                val info = context.endInfo()
+                val end = SessionEndCalc.compute(sessionStartedAt, endedAt, info)
+                trace("session end $end")
+                cardJob = scope.launch {
+                    store.finishSession(session.await(), endedAt, end, SessionEndCalc.downsample(info.points))
+                }
+                outputs.showCard()
+            }
+            SessionCommand.StartSummary -> {
+                outputs.startSummary()
+                playSummary()
+            }
+            SessionCommand.StopSummary -> {
+                endSummary(stopSpeech = true, notifyDone = false)
+                outputs.stopSummary()
+            }
             SessionCommand.NewSession -> {
                 val d = CompletableDeferred<Long>()
                 sessionId = d
+                cardJob = null
                 val startedAt = clock.nowMillis()
+                sessionStartedAt = startedAt
+                context.onSessionStart()
                 scope.launch { d.complete(store.createSession(context.profileId(), context.segment(), startedAt)) }
             }
             SessionCommand.CloseSession -> {
+                endSummary(stopSpeech = true, notifyDone = false)
                 val session = sessionId
                 val endedAt = clock.nowMillis()
                 scope.launch { store.closeSession(session.await(), endedAt) }
@@ -187,6 +268,56 @@ class SessionController(
             val items = if (status == LlmStatus.DONE) entry.items else listOf(StructureContract.rawFallback(entry.text))
             store.replaceItems(entry.dbId.await(), items, status)
             trace("committed $status items=${items.size} dbId=${entry.dbId.await()}")
+            outputs.refreshCard()
         }
+    }
+
+    private fun cancelSttTimeout() {
+        sttTimeoutJob?.cancel()
+        sttTimeoutJob = null
+        sttTimeoutRound = -1
+    }
+
+    /** 요약 문장을 만들어 TTS 로 읽는다. 15초 상한을 넘으면 끊는다(PRD §4-2). */
+    private fun playSummary() {
+        val seq = ++summarySeq
+        summaryJob?.cancel()
+        val session = sessionId
+        summaryJob = scope.launch {
+            val sid = session.await()
+            cardJob?.join()
+            val items = store.loadCard(sid)?.items.orEmpty().map { SummaryItem(it.type, it.emotion, it.keywords) }
+            val text = SummaryComposer.compose(items)
+            if (seq != summarySeq) return@launch
+            store.setSummaryText(sid, text)
+            if (seq != summarySeq) return@launch
+            summaryText = text
+            summarySpeaking = true
+            trace("summary speak: $text")
+            outputs.summaryStarted(text)
+            speechOut.say(text)
+            delay(SUMMARY_MAX_MS)
+            if (seq == summarySeq) {
+                trace("summary 15s hard stop")
+                endSummary(stopSpeech = true, notifyDone = true)
+            }
+        }
+    }
+
+    /** 재생 중이던 요약을 정리한다. 대기 중인 시작 요청도 무효로 만든다. */
+    private fun endSummary(stopSpeech: Boolean, notifyDone: Boolean) {
+        summarySeq++
+        summaryJob?.cancel()
+        summaryJob = null
+        val wasPlaying = summaryText != null
+        summaryText = null
+        summarySpeaking = false
+        if (stopSpeech && wasPlaying) speechOut.stop()
+        if (wasPlaying) outputs.summaryEnded()
+        if (notifyDone) post(SessionEvent.SummaryDone)
+    }
+
+    private companion object {
+        const val SUMMARY_MAX_MS = 15_000L
     }
 }
