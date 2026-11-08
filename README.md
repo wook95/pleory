@@ -103,6 +103,17 @@ tools/run-demo.sh [배속=30] [pcm|text]
 - 18:57과 19:08에 한마디가 입력되고, 19:31에 기어 P, 마지막 위치의 300m 반경 판정으로 카드가 뜬다.
 - `pcm`은 준비한 PCM 파일을 on-device STT에 넣고, `text`는 STT를 우회해 텍스트를 인식 결과로 넣는다. PCM 준비 방법은 스크립트 상단 주석을 본다.
 
+영상 v2(이틀 이야기, `docs/pleory/video-script.md`)는 하루에 명령 하나로 전 장면을 재현한다. 텍스트 모드만 쓴다.
+
+```bash
+REC=1 tools/run-demo.sh v2 day1   # 앱 데이터 초기화 → 동의 → 퇴근길 18:40, 한마디 3개 → 카드·요약 → 지우기 → QR → 지난 기록·할 일만 → 시동 OFF (약 2분 20초)
+REC=1 tools/run-demo.sh v2 day2   # 같은 DB 로 다음 날 출근길 08:10 → Gleo 호출 → 회사 도착 → 리마인드 → 했어 (약 2분, 다시 돌려도 된다)
+```
+
+- 산출물은 `apk/video/v2/day1|day2/` 에 `flow.log`(logcat), `rec_start.txt`, `raw.webm`(REC=1). `video/scripts/prepare.sh apk/video/v2/day1` 와 `node video/scripts/timings.mjs apk/video/v2` 가 그대로 읽는다. `SHOTS=<디렉터리>` 면 주요 장면 PNG 도 남긴다.
+- 탭은 좌표 상수가 아니라 디버그 receiver(`DemoReceiver`)가 버튼을 접근성 이름으로 찾아 누르고, 화면 좌표를 `PleoryDemo tap <이름> x= y=` 로 남긴다.
+- 시뮬레이션: 운전자 대사는 텍스트로 넣고(듣는 중은 대사 길이만큼 유지), 한마디 3은 정리를 건너뛰고 원문으로 저장하며, Gleo 호출은 테스트 ASR broadcast 로 넣는다(Gleo 가 우리 앱으로 안 오면 `ADD_DRIVE_NOTE` intent 를 직접 넣고 `gleo simulated` 를 남긴다).
+
 데모 fixture (실서비스 연동 아님):
 
 - 날씨: 항상 "비".

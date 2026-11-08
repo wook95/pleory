@@ -317,3 +317,13 @@ FusedLocation 퍼미션명은 문서에서 확인해 추가한다. MainActivity�
 - 축약 규칙: 제목, 통계, 요약은 유지하고 항목을 뒤에서부터 빼며, 뺀 것이 있으면 마지막 줄에 "외 N개"를 붙인다. 문자 중간에서 자르지 않는다.
 - 정차 중에만 열고, 카드(S1)와 S2 에서 들어간다.
 - 테스트: 페이로드 생성, 길이 상한, zxing 으로 인코드 후 디코드한 결과가 원문과 같은지.
+
+### 8-10. 데모 파이프라인 v2 (2026-11-08)
+
+- `tools/run-demo.sh v2 day1|day2` 가 영상 대본(`video-script.md` "파이프라인 요구사항")의 하루치 장면을 한 번에 재현한다. 순서와 기다리는 logcat 표지는 대본 표 그대로다.
+- 녹화 중 조작은 Activity 대신 디버그 broadcast(`debugpanel/DemoReceiver`: arm·tap·ignition-off)로 해서 화면을 가리지 않는다. 탭은 보이는 버튼을 contentDescription 으로 찾아 `performClick` 하고, 직전에 화면 좌표를 남긴다. 창 크기가 바뀌어도 같은 버튼을 누른다.
+- 앱 쪽 훅은 디버그 경로에서만 쓴다: `AppClock.setDemo(speed, base)`(2일차 = 1일차 날짜 + 1일 08:10), `PcmInjectableSpeechInput.pendingTextDelayMs`(듣는 중 유지), `PleoryApp.skipNextLlm`(한마디 3을 RAW 로).
+- 도착 판정이 위치 전달 지연(실측 0.3~1.4초, 30배속이면 앱 시각 최대 40초)에 흔들려 카드 시간이 51·52분을 오갔다. 경로 끝점을 19:30:40(2일차 09:00:40)으로 20초 당겨 19:31·09:01 가짜 기어 P 시각에 도착이 잡히게 했다.
+- 리마인드 문구는 할 일 앞의 상대 날짜 낱말(내일·오늘 등)을 뗀다(`ArrivalReminder.itemText`). 1일차 할 일이 "내일 거래처 서류 다시 보내기"로 정리되어, 다음 날 "어제 퇴근길에 … 내일 거래처 서류…"로 읽히던 것을 고쳤다. 카드·지난 기록의 항목 텍스트는 그대로다.
+- Gleo 호출 A: "플레오리, 오늘 오후 세 시 …"는 Gleo 분류기가 기본 리마인더(`cloud_call_reminder_agent`)로 보낸다(3/3). "플레오리 앱에서, …"는 우리 앱 액션(`on-device_call_app_action_agent`)으로 와서 약 2초 뒤 `ADD_DRIVE_NOTE` 를 받는다. 대본 4번 대사를 이 문구로 바꿨다.
+

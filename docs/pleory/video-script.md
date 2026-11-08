@@ -27,9 +27,9 @@
 | 1 | 오늘 팀장 때문에 진짜 힘들었다 | `[sighs] 오늘 팀장 때문에... 진짜 힘들었다.` | `driver-1.mp3` | 3.5초 (있음) |
 | 2 | 내일 거래처 서류 다시 보내야 해 아 노을 예쁘다 | `내일 거래처 서류 다시 보내야 해. [pause] [soft laugh] 아, 노을 예쁘다.` | `driver-2.mp3` | 8.2초 (있음) |
 | 3 | 음 그 뭐냐 | `음... [pause] 그 뭐냐...` | `driver-3.mp3` | 약 2초 (새로 만듦) |
-| 4 | 플레오리, 오늘 오후 세 시 회의 자료 챙기라고 적어줘 | `플레오리, [pause] 오늘 오후 세 시 회의 자료 챙기라고 적어줘.` | `driver-4.mp3` | 약 4초 (새로 만듦) |
+| 4 | 플레오리 앱에서, 오늘 오후 세 시 회의 자료 챙기라고 적어줘 | `플레오리 앱에서, [pause] 오늘 오후 세 시 회의 자료 챙기라고 적어줘.` | `driver-4.mp3` | 약 4초 (다시 만들어야 함, 아래) |
 
-4번 대사가 Gleo 에서 우리 앱으로 잘 이어지지 않으면(라우팅은 비결정적이다, TRD §8-4) 앞을 "플레오리 앱에서"로 바꾼다. 그때는 넣는 텍스트, 대사, 컷 25 자막을 함께 바꾼다.
+4번 대사는 "플레오리 앱에서"로 시작한다. "플레오리, 오늘 오후 …"로 넣었더니 Gleo 가 세 번 모두 기본 리마인더로 보냈다(2026-11-08 실측, TRD §8-10). 그래서 넣는 텍스트, 대사, 컷 25 자막을 함께 바꿨다. 먼저 만든 `driver-4.mp3`(23:16)는 옛 문구라 지우고 `tools/gen-vo.sh` 로 다시 만든다.
 
 Gleo 경로에서 앱은 "적어뒀어"를 말하지 않는다. 우리 TTS 가 오디오 포커스를 잡으면 Gleo 가 응답을 거부해서, 확인 음성은 Gleo 가 낸다(TRD §8-4, `SessionStateMachine.kt:178`). 그래서 컷 26 의 소리는 녹화된 Gleo 의 대답이고, 자막에 "적어뒀어"를 쓰지 않는다.
 
@@ -63,7 +63,7 @@ Gleo 경로에서 앱은 "적어뒀어"를 말하지 않는다. 우리 TTS 가 �
 | 22 | 1:15–1:18 | D1 녹화: "할 일만" 탭 → 할 일이 남은 세션만, 행 아래 할 일 | 필터 칩에서 목록으로 내려오는 팬(120%) | 남은 할 일만 모아서 | tap | US-10 |
 | 23 | 1:18–1:21 | 타이틀: 검은 화면 "다음 날 아침" | 고정. 0.4초 페이드 | 다음 날 아침 | BGM −4dB, car-ambience 페이드 인 | — |
 | 24 | 1:21–1:24 | D2 녹화: S0 상단 "출근길 · 기록 중" | 상단 라벨로 140% | 출근길, 08:10 | BGM | US-01 |
-| 25 | 1:24–1:29 | D2 녹화: S0 그대로, Gleo 가 듣는 상태(시스템 표시가 크롭 안에 있으면 그대로 보인다) | 100% 고정 | 플레오리, 오늘 오후 / 세 시 회의 자료 → 이어서 챙기라고 적어줘 (대사) | 운전자 대사 4. BGM −6dB | US-09 |
+| 25 | 1:24–1:29 | D2 녹화: S0 그대로, Gleo 가 듣는 상태(시스템 표시가 크롭 안에 있으면 그대로 보인다) | 100% 고정 | 플레오리 앱에서, 오늘 / 오후 세 시 회의 자료 → 이어서 챙기라고 적어줘 (대사) | 운전자 대사 4. BGM −6dB | US-09 |
 | 26 | 1:29–1:32 | D2 녹화: S0 화면 변화 없음 | 100% 고정 | 버튼 없이 Gleo 로도 | Gleo 의 대답(녹화 원음). BGM −8dB | US-09 |
 | 27 | 1:32–1:35 | D2 녹화: 남은 경로 빠르게, 끝에 기어 P | 100% 고정, 시각 칩 넘김 | 회사 앞, 기어 P | BGM +1.5dB, 2초에 gear-park | US-05 |
 | 28 | 1:35–1:42 | D2 녹화: S1 카드, 맨 위 리마인드 띠 "어제 퇴근길 · 거래처 서류 다시 보내기" | 띠로 150% 줌 인, 고정 | 도착하면 어제 할 일부터 | 앱 TTS "어제 퇴근길에 할 일 하나 말했어. 거래처 서류 다시 보내기." 뒤이은 요약은 0.5초 페이드 아웃. BGM −8dB | US-11 |
@@ -106,7 +106,7 @@ Gleo 경로에서 앱은 "적어뒀어"를 말하지 않는다. 우리 TTS 가 �
 
 ### 공통
 
-1. 실행 형태: `tools/run-demo.sh v2 day1 [speed=30]`, `tools/run-demo.sh v2 day2 [speed=30]`. 텍스트 모드만 쓴다.
+1. 실행 형태: `tools/run-demo.sh v2 day1 [speed=30]`, `tools/run-demo.sh v2 day2 [speed=30]`. 텍스트 모드만 쓴다. (구현됨: 환경 변수 `REC=1` 이면 녹화, `OUT=` 산출 디렉터리, `SHOTS=` 확인용 스크린샷, `GLEO=b` 면 B 만. 탭은 좌표 상수 대신 디버그 receiver 가 버튼을 접근성 이름으로 찾아 누르고 `PleoryDemo tap <이름> x= y=` 로 화면 좌표를 남긴다. 유지 시간은 `video/public/vo/driver-N.mp3` 길이 + 0.1초를 ffprobe 로 잰다.)
 2. 듣는 중 유지(새로): 텍스트 모드는 "듣고 있어요"가 0.3초만 보인다. 대사 길이만큼 듣는 중을 유지한 뒤 텍스트를 넣는다. 한마디마다 유지 시간을 받는다(1: 3.6초, 2: 8.4초, 3: 2.2초, 실제 mp3 길이 + 0.1초). 저장 시각이 목표 분에 오도록 앞당김(`leadMs`)에 유지 시간을 더한다. 30배속에서 8.4초는 앱 시각 4분 12초라서 듣기 시작은 19:04 무렵이 된다. 편집 칩은 저장 분에 고정한다.
 3. UI 탭(새로): 동의, 지우기 2단계, 폰에서 열기, QR 닫기, 지난 기록, 할 일만, 했어는 스크립트가 `adb shell input tap x y` 로 누른다. 좌표는 2560×1440 화면 기준으로 실측해 스크립트 위에 상수로 둔다. 누르기 직전에 `adb shell log -t PleoryDemo "tap <이름>"` 을 남겨 편집의 손가락 원과 녹화 시각을 같은 logcat 시계로 맞춘다.
 4. 시계(새로): D1 은 지금처럼 오늘 18:40 에서 출발한다(`PleoryApp.setDemo`). D2 는 D1 날짜 + 1일 08:10 에서 출발해야 한다. `setDemo(speed, base)` 처럼 출발 시각을 받게 한다. 리마인드의 "어제"는 앱 시계의 달력 날짜 차이로 정해진다(`ArrivalReminder.relativeDay`).
@@ -159,7 +159,7 @@ Gleo 경로에서 앱은 "적어뒀어"를 말하지 않는다. 우리 TTS 가 �
 | 6 | +2초 | 녹화 멈춤 | — |
 
 - 경로(새로): `tools/demo-route.gpx` 를 거꾸로 한 `demo-route-day2.gpx`. 시각은 08:10 부터 다시 매긴다. 출발점 판정(`ROUTE_START`)과 가짜 목적지(`FAKE_HOME`)도 D2 용으로 바꾼다. 목적지 이름이 "회사"면 구간은 출근길이 된다(`SegmentRule` 규칙 2).
-- Gleo 호출 A(권장): 실제 Gleo 에 인식 결과 텍스트를 넣는다. `adb shell am broadcast --user 10 -a ai.umos.intent.action.ASR -p ai.umos.ambientai --es ASR "'플레오리, 오늘 오후 세 시 회의 자료 챙기라고 적어줘'"`. Gleo 가 우리 액션을 고르고 자기 목소리로 대답하므로 컷 26 의 소리가 녹화에 담긴다. 마이크를 거치지 않는 테스트 broadcast 라 입력은 시뮬레이션이다. 수신까지 1.7~3.4초 걸린다(TRD §8-4).
+- Gleo 호출 A(권장): 실제 Gleo 에 인식 결과 텍스트를 넣는다. `adb shell am broadcast --user 10 -a ai.umos.intent.action.ASR -p ai.umos.ambientai --es ASR "'플레오리 앱에서, 오늘 오후 세 시 회의 자료 챙기라고 적어줘'"`. Gleo 가 우리 액션을 고르고 자기 목소리로 대답하므로 컷 26 의 소리가 녹화에 담긴다. 마이크를 거치지 않는 테스트 broadcast 라 입력은 시뮬레이션이다. 수신까지 1.7~3.4초 걸린다(TRD §8-4).
 - Gleo 호출 B(대체): A 가 세 번 안에 우리 앱으로 오지 않으면 Gleo 가 보내는 intent 를 직접 넣는다. `adb shell am broadcast --user 10 -a com.pplab.pleory.ADD_DRIVE_NOTE -p com.pplab.pleory --es ACTION_PARAM '{"note":"오늘 오후 세 시 회의 자료 챙기기"}'`. 이때는 Gleo 대답 소리가 없다. 컷 26 은 BGM 만 쓰고, 화면 우상단에 작은 글씨 "Gleo 호출 시뮬레이션"을 넣는다.
 - 기대 리마인드: 후보는 D1 의 할 일 하나뿐이어야 한다. 시드 할 일은 `remindedAt` 이 차 있어 빠지고, D2 의 회의 자료 할 일은 지금 세션이라 빠진다. 띠와 TTS 의 할 일 문구는 D1 카드의 할 일 텍스트 그대로다. D1 에서 LLM 이 "거래처 서류 다시 보내기"가 아닌 다른 문구를 냈으면 컷 28 자막과 이 문서를 그 문구로 고친다.
 
@@ -169,16 +169,17 @@ Gleo 경로에서 앱은 "적어뒀어"를 말하지 않는다. 우리 TTS 가 �
 
 - D1: `clock0`, `consentTap`, `tap1`·`ack1`·`ack1Done`, `tap2`·`ack2`·`ack2Done`, `tap3`·`ack3`·`ack3Done`, `gearP`, `cardShown`, `summaryStart`·`summaryEnd`, `deleteTap`·`deleteConfirmTap`, `qrTap`·`qrOpen`·`qrClose`, `historyTap`·`todoOnlyTap`
 - D2: `clock0`, `gleoInject`·`gleoAccepted`·`gleoResponse`, `gearP`, `cardShown`, `remindStart`, `summaryEnd`, `remindDoneTap`
+- 구현(`video/scripts/timings.mjs <day1> <day2>` 또는 `timings.mjs apk/video/v2`): 위 키를 `d1`·`d2` 아래에 두고, 지금 `cuts.ts` 가 읽는 평평한 키는 1일차 값으로 그대로 채운다. 각 날에 `tapXY`(탭 이름 → 화면 좌표, 손가락 원용), `d2.gleoSimulated`(B 를 썼으면 true)를 더한다. 2일차는 아직 footage 가 없어 화면 보정 없이 로그 시각 그대로다.
 - `tools/gen-vo.sh` 의 `LINES` 에 대사 3·4를 더한다(위 표의 eleven_v3 입력 그대로). 1·2는 다시 만들지 않는다.
 
 ## 녹화 체크리스트
 
 1. 다른 경로 재생이나 에이전트가 에뮬레이터를 쓰고 있지 않은지 확인한다. 겹치면 거리가 48km 처럼 나온다.
-2. D1 전에 앱 데이터를 지우고(`adb shell pm clear --user 10 com.pplab.pleory`) 권한을 다시 준다(`FUSED_LOCATION`, `ACCESS_FINE/COARSE_LOCATION`). 동의 화면(US-08)이 나와야 하기 때문이다. 그다음 영상 시드를 넣는다.
-3. `adb emu screenrecord start --time-limit 180 <절대경로>.webm` 를 실행하고 바로 `tools/run-demo.sh v2 day1` 를 돌린다. D2 도 같은 방법으로 따로 찍는다.
+2. D1 전에 앱 데이터를 지우고(`adb shell pm clear --user 10 com.pplab.pleory`) 권한을 다시 준다(`FUSED_LOCATION`, `ACCESS_FINE/COARSE_LOCATION`). 동의 화면(US-08)이 나와야 하기 때문이다. 그다음 영상 시드를 넣는다. `tools/run-demo.sh v2 day1` 이 녹화 전에 이 셋을 한다(따로 하려면 `tools/run-demo.sh v2 reset`).
+3. `REC=1 tools/run-demo.sh v2 day1` 를 돌린다. 시드를 넣은 뒤 `adb emu screenrecord start --time-limit 180` 으로 `apk/video/v2/day1/raw.webm` 녹화를 시작하고, 끝나면 멈춘다. D2 는 `REC=1 tools/run-demo.sh v2 day2` 로 따로 찍는다. 기다리는 표지가 시간 안에 안 나오면 스크립트가 `시간 초과` 를 찍고 멈춘다.
 4. D1 logcat `PleoryFlow` 에서 한마디 1·2가 모두 `llm ok: claude` 인지, 한마디 3이 `committed FAILED items=1` 인지, 도착 때 `remind candidates n=0` 인지 확인한다. 하나라도 다르면 D1 을 다시 찍는다.
-5. D1 카드의 할 일 문구를 적어 둔다. D2 리마인드 자막이 이 문구를 따른다.
-6. D2 에서 `remind candidates n=1` 이 아니면 시드의 `remindedAt` 을 확인하고 D2 를 다시 찍는다(D1 은 다시 찍지 않아도 된다. 다만 D2 를 다시 찍으려면 `remind done` 으로 바뀐 D1 할 일을 되돌려야 한다).
+5. D1 카드의 할 일 문구를 적어 둔다. D2 리마인드 자막이 이 문구를 따른다. 리마인드는 문구 앞의 "내일"·"오늘" 같은 낱말을 떼고 읽는다(2026-11-08 실측: 카드 "내일 거래처 서류 다시 보내기" → 리마인드 "거래처 서류 다시 보내기").
+6. D2 에서 `remind candidates n=1` 이 아니면 시드의 `remindedAt` 을 확인하고 D2 를 다시 찍는다(D1 은 다시 찍지 않아도 된다. `tools/run-demo.sh v2 day2` 가 시작할 때 앞선 2일차 세션을 지우고 D1 할 일의 했어·알림 기록을 되돌린다).
 7. 시뮬레이션 표시: 운전자 음성은 전부 편집에서 얹은 것이고, 앱은 같은 단어를 텍스트로 받았다(텍스트 모드). D2 의 Gleo 입력도 테스트 broadcast 로 넣은 것이다(A든 B든). 한마디 3은 정리를 건너뛰게 한 것이다. 제출 설명란에 이 세 가지를 적는다. 엔딩의 "에뮬레이터 시연" 글씨는 빼지 않는다.
 8. 컷 20 의 폰 화면 글자는 QR 모달 프레임을 zxing 으로 디코드해 그대로 붙인다. 디코드가 안 되면 컷 20 을 뺀다.
 
