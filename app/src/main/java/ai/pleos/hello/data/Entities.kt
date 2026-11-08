@@ -72,6 +72,10 @@ data class Item(
     val emotion: Emotion = Emotion.NEUTRAL,
     val keywords: List<String> = emptyList(),
     val deleted: Boolean = false,
+    /** 도착 리마인드의 "했어"(F15). 끝낸 할 일은 다시 알리지 않는다. */
+    @androidx.room.ColumnInfo(defaultValue = "0") val done: Boolean = false,
+    /** 도착 리마인드로 말한 시각(F15). 한 번 말한 항목은 다시 말하지 않는다. */
+    val remindedAt: Long? = null,
 )
 
 /** 경로·거리·정체 계산용 궤적점(5초 간격). */

@@ -1,7 +1,9 @@
 package ai.pleos.hello.app
 
+import ai.pleos.hello.core.ArrivalReminder
 import ai.pleos.hello.core.CardModel
 import ai.pleos.hello.core.Clock
+import ai.pleos.hello.core.ReminderCandidate
 import ai.pleos.hello.core.SessionCommand
 import ai.pleos.hello.core.SessionEvent
 import ai.pleos.hello.core.SessionState
@@ -99,6 +101,12 @@ class SessionController(
     private var summarySpeaking = false
     private var sessionDeleted = false
     private var presetItems: List<StructuredItem>? = null
+
+    /** 도착 리마인드(F15). 세션당 한 번 첫 카드에서 고르고, 요약 앞에 한 번만 말한다. 쓰기는 직렬 경로에서만. */
+    private var reminderJob: Job? = null
+    @Volatile private var reminders: List<ReminderCandidate> = emptyList()
+    private var reminderUnspoken = false
+    private var summaryCapMs = SUMMARY_MAX_MS
 
     /** 저장소에 쓰는 진행 중 작업. 전체 삭제가 이들이 끝난 뒤에 지우도록 추적한다. */
     private val dbJobs = java.util.concurrent.CopyOnWriteArraySet<Job>()
@@ -241,6 +249,8 @@ class SessionController(
     fun deleteAllData(onDone: () -> Unit = {}) {
         scope.launch {
             entries.clear()
+            reminders = emptyList()
+            reminderUnspoken = false
             dbJobs.toList().joinAll()
             store.deleteAll()
             sessionDeleted = true
@@ -262,6 +272,22 @@ class SessionController(
             // 읽는 중인 요약은 지운 항목을 담고 있으므로 멈춘다. 다시 들으면 새로 만든다
             if (summaryText != null) endSummary(stopSpeech = true, notifyDone = true)
             outputs.refreshCard()
+        }
+    }
+
+    /** 카드 상단 리마인드 띠(F15). 이번 세션 도착 때 고른 할 일 중 "했어" 를 누르지 않은 것. */
+    suspend fun loadReminders(): List<ReminderCandidate> {
+        reminderJob?.join()
+        return reminders
+    }
+
+    /** 리마인드 띠의 "했어". 주행 중 차단은 화면 쪽이 한다. */
+    fun markReminderDone(itemId: Long) {
+        launchDb {
+            // 띠에서 먼저 뺀다 — 저장 중에 카드를 다시 읽어도 끝낸 항목이 되살아나지 않게
+            reminders = reminders.filter { it.itemId != itemId }
+            store.markItemDone(itemId)
+            trace("remind done id=$itemId")
         }
     }
 
@@ -378,6 +404,7 @@ class SessionController(
                 cardJob = launchDb {
                     store.finishSession(session.await(), endedAt, end, SessionEndCalc.downsample(info.points))
                 }
+                if (reminderJob == null) findReminders(session, endedAt)
                 outputs.showCard()
             }
             SessionCommand.StartSummary -> {
@@ -392,6 +419,9 @@ class SessionController(
                 val d = CompletableDeferred<Long>()
                 sessionId = d
                 cardJob = null
+                reminderJob = null
+                reminders = emptyList()
+                reminderUnspoken = false
                 val startedAt = clock.nowMillis()
                 sessionStartedAt = startedAt
                 context.onSessionStart()
@@ -416,6 +446,17 @@ class SessionController(
         }
     }
 
+    /** 이전 세션들의 미완료 할 일을 고른다(F15). 같은 세션에서 카드가 다시 떠도 다시 고르지 않는다(띠가 유지된다). */
+    private fun findReminders(session: CompletableDeferred<Long>, now: Long) {
+        val profileId = context.profileId()
+        reminderJob = scope.launch {
+            val picked = ArrivalReminder.select(store.reminderCandidates(profileId, now - ArrivalReminder.WINDOW_MS), session.await(), now)
+            reminders = picked
+            reminderUnspoken = picked.isNotEmpty()
+            trace("remind candidates n=${picked.size}")
+        }
+    }
+
     private fun cancelSttTimeout() {
         sttTimeoutJob?.cancel()
         sttTimeoutJob = null
@@ -432,6 +473,7 @@ class SessionController(
                 val sid = session.await()
                 cardJob?.join()
                 itemDeleteJob?.join()
+                reminderJob?.join()
                 val items = store.loadCard(sid)?.items.orEmpty().map { SummaryItem(it.type, it.emotion, it.keywords) }
                 val text = SummaryComposer.compose(items)
                 if (seq != summarySeq) return@launch
@@ -441,11 +483,22 @@ class SessionController(
                     endSummary(stopSpeech = false, notifyDone = true)
                     return@launch
                 }
-                summaryText = text
+                // 리마인드는 요약 앞에 붙여 한 번에 읽는다(겹치지 않게). 카드 상태 = 기어 P 일 때만 말한다
+                val now = clock.nowMillis()
+                val remind = if (reminderUnspoken) ArrivalReminder.line(reminders, now, parked = machine.state == SessionState.CARD) else null
+                val spoken = if (remind != null) "$remind $text" else text
+                if (remind != null) {
+                    reminderUnspoken = false
+                    val ids = reminders.map { it.itemId }
+                    trace("remind speak n=${ids.size}")
+                    launchDb { store.markReminded(ids, now) }
+                }
+                summaryText = spoken
                 summarySpeaking = true
-                if (BuildConfig.DEBUG) trace("summary speak: $text")
-                outputs.summaryStarted(text)
-                speechOut.say(text, resumable = true)
+                if (BuildConfig.DEBUG) trace("summary speak: $spoken")
+                outputs.summaryStarted(spoken)
+                speechOut.say(spoken, resumable = true)
+                summaryCapMs = if (remind != null) SUMMARY_MAX_MS + REMIND_EXTRA_MS else SUMMARY_MAX_MS
                 startSummaryCap(seq)
             } catch (e: CancellationException) {
                 throw e
@@ -457,11 +510,11 @@ class SessionController(
         }
     }
 
-    /** 요약 [seq] 회차를 15초 뒤 끊는다. 다시 부르면 처음부터 다시 잰다. */
+    /** 요약 [seq] 회차를 15초(리마인드를 붙였으면 +[REMIND_EXTRA_MS]) 뒤 끊는다. 다시 부르면 처음부터 다시 잰다. */
     private fun startSummaryCap(seq: Int) {
         summaryCapJob?.cancel()
         summaryCapJob = scope.launch {
-            delay(SUMMARY_MAX_MS)
+            delay(summaryCapMs)
             if (seq == summarySeq) {
                 trace("summary 15s hard stop")
                 endSummary(stopSpeech = true, notifyDone = true)
@@ -489,5 +542,8 @@ class SessionController(
 
     private companion object {
         const val SUMMARY_MAX_MS = 15_000L
+
+        /** 리마인드 한 줄 몫. 첫 할 일을 30자로 잘라 한 줄이 이 안에 끝난다. */
+        const val REMIND_EXTRA_MS = 7_000L
     }
 }
