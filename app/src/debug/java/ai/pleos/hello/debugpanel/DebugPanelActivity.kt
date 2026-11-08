@@ -64,6 +64,9 @@ class DebugPanelActivity : Activity() {
             "데모 시나리오 무장(텍스트, STT 우회)" to { DemoScenario.arm(app, viaText = true); log("demo armed text") },
             "데모 초기화(가짜 입력·DemoClock 해제)" to { DemoScenario.reset(app); log("demo reset") },
             "TTS 적어뒀어" to { hub.speechOutput.say("적어뒀어"); log("tts say") },
+            "UX 제한 강제 ON (디버그 오버라이드)" to { hub.setUxOverride(true); log("ux override ON") },
+            "UX 제한 강제 OFF (디버그 오버라이드)" to { hub.setUxOverride(false); log("ux override OFF") },
+            "UX 제한 오버라이드 해제" to { hub.setUxOverride(null); log("ux override cleared") },
             "UX 제한 상태" to { log("ux required=${hub.uxRestrictions.isDistractionOptimizationRequired}") },
         ).forEach { (label, action) ->
             col.addView(Button(this).apply {
@@ -105,6 +108,11 @@ class DebugPanelActivity : Activity() {
     private fun handleIntent() {
         if (intent.getStringExtra("action") == "gear") { // adb 용 가짜 기어: --es action gear --es gear P|D|none
             hub.setGearOverride(when (intent.getStringExtra("gear")) { "P" -> Gear.P; "D" -> Gear.D; else -> null })
+            finish()
+            return
+        }
+        if (intent.getStringExtra("action") == "ux") { // adb 용 UX 제한 강제: --es action ux --es ux on|off|none
+            hub.setUxOverride(when (intent.getStringExtra("ux")) { "on" -> true; "off" -> false; else -> null })
             finish()
             return
         }
