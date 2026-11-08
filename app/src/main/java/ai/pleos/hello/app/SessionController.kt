@@ -412,7 +412,7 @@ class SessionController(
                 summarySpeaking = true
                 if (BuildConfig.DEBUG) trace("summary speak: $text")
                 outputs.summaryStarted(text)
-                speechOut.say(text)
+                speechOut.say(text, resumable = true)
                 delay(SUMMARY_MAX_MS)
                 if (seq == summarySeq) {
                     trace("summary 15s hard stop")

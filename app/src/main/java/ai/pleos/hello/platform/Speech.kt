@@ -37,7 +37,9 @@ interface SpeechInput {
 
 interface SpeechOutput {
     var onDone: (() -> Unit)?
-    fun say(text: String)
+
+    /** [resumable] 이면 일시적 포커스 손실(내비 안내·Gleo) 동안 멈췄다가 포커스가 돌아오면 처음부터 다시 읽는다(요약). */
+    fun say(text: String, resumable: Boolean = false)
     fun stop()
 }
 
@@ -162,6 +164,11 @@ class PleosSpeechOutput(context: Context, private val post: Post) : SpeechOutput
     private var focusSeq = 0
     private val utterance = UtteranceTracker()
 
+    /** 지금 발화. 일시 손실 뒤 다시 읽을 때 쓴다. 직렬 경로에서만. */
+    private var text: String? = null
+    private var resumable = false
+    private var paused = false
+
     override var onDone: (() -> Unit)? = null
 
     private val sdkListener = object : EventListener {
@@ -205,7 +212,7 @@ class PleosSpeechOutput(context: Context, private val post: Post) : SpeechOutput
         runCatching { tts.release() }
     }
 
-    override fun say(text: String) {
+    override fun say(text: String, resumable: Boolean) {
         if (!ready) {
             Log.w(TAG, "tts not ready, drop len=${text.length}")
             return
@@ -222,6 +229,12 @@ class PleosSpeechOutput(context: Context, private val post: Post) : SpeechOutput
             return
         }
         focusRequest = request
+        this.text = text
+        this.resumable = resumable
+        speakNow(text)
+    }
+
+    private fun speakNow(text: String) {
         utterance.begin()
         tts.setAudioAttributes(attrs)
         tts.speak(text, true)
@@ -236,15 +249,34 @@ class PleosSpeechOutput(context: Context, private val post: Post) : SpeechOutput
     }
 
     private fun onFocusChange(seq: Int, change: Int) {
-        if (seq != focusSeq || focusRequest == null || FocusPolicy.onFocusChange(change) == FocusPolicy.Change.KEEP) return
-        Log.i(TAG, "tts focus lost $change")
-        runCatching { tts.stop() }
-        utterance.halt()
-        abandonFocus()
-        onDone?.invoke()
+        if (seq != focusSeq || focusRequest == null) return
+        when (FocusPolicy.onFocusChange(change, resumable, paused)) {
+            FocusPolicy.Change.KEEP -> Unit
+            // 포커스 요청은 쥔 채로 둬야 손실이 끝날 때 GAIN 이 온다
+            FocusPolicy.Change.PAUSE -> {
+                Log.i(TAG, "tts focus paused $change")
+                runCatching { tts.stop() }
+                utterance.halt()
+                paused = true
+            }
+            FocusPolicy.Change.RESUME -> {
+                Log.i(TAG, "tts focus regained, resume")
+                paused = false
+                text?.let(::speakNow)
+            }
+            FocusPolicy.Change.STOP -> {
+                Log.i(TAG, "tts focus lost $change")
+                runCatching { tts.stop() }
+                utterance.halt()
+                abandonFocus()
+                onDone?.invoke()
+            }
+        }
     }
 
     private fun abandonFocus() {
+        paused = false
+        text = null
         val r = focusRequest ?: return
         focusRequest = null
         audioManager.abandonAudioFocusRequest(r)

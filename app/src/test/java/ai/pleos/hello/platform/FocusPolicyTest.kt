@@ -51,4 +51,13 @@ class FocusPolicyTest {
         assertEquals(FocusPolicy.Change.KEEP, FocusPolicy.onFocusChange(AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK))
         assertEquals(FocusPolicy.Change.KEEP, FocusPolicy.onFocusChange(AudioManager.AUDIOFOCUS_GAIN))
     }
+
+    @Test
+    fun `요약은 일시 손실에 멈췄다가 GAIN 에서 다시 읽고, 적어뒀어는 일시 손실에 생략된다`() {
+        assertEquals(FocusPolicy.Change.PAUSE, FocusPolicy.onFocusChange(AudioManager.AUDIOFOCUS_LOSS_TRANSIENT, resumable = true))
+        assertEquals(FocusPolicy.Change.RESUME, FocusPolicy.onFocusChange(AudioManager.AUDIOFOCUS_GAIN, resumable = true, paused = true))
+        assertEquals(FocusPolicy.Change.STOP, FocusPolicy.onFocusChange(AudioManager.AUDIOFOCUS_LOSS_TRANSIENT, resumable = false))
+        // 영구 손실은 요약도 끝낸다
+        assertEquals(FocusPolicy.Change.STOP, FocusPolicy.onFocusChange(AudioManager.AUDIOFOCUS_LOSS, resumable = true))
+    }
 }
