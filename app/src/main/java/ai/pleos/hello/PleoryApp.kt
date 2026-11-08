@@ -123,8 +123,12 @@ class PleoryApp : Application() {
             Log.i(FLOW_TAG, "ux required=$required active=${sdkHub.uxRestrictions.activeRestrictions} gate=${gateAllowed()}")
             onGateChanged?.invoke()
         }
-        sdkHub.gear.addListener { g -> gearEvent(g) }
-        sdkHub.gear.current { g -> if (g != null) gearEvent(g) else startGearFallback() }
+        // 진짜 기어 이벤트가 오면 대체 판정은 끈다(둘이 섞여 P/D 가 뒤바뀌지 않게)
+        sdkHub.gear.addListener { g -> stopGearFallback(); gearEvent(g) }
+        sdkHub.gear.current { g ->
+            if (g != null) gearEvent(g)
+            else if (ParkedFallback.shouldStart(g, sdkHub.gear.supported)) startGearFallback()
+        }
         // 시동 = 앱 세션 시작(D11). 이전 PENDING 발화는 새 세션 뒤에 재처리한다.
         controller.post(SessionEvent.IgnitionOn)
         wireArrival()
@@ -163,6 +167,9 @@ class PleoryApp : Application() {
     /** 알려진 목적지 반경 진입을 FusedLocation 근접 알림으로도 받는다(자체 거리 계산과 병행, 머신은 멱등). */
     private fun watchProximity(state: DestinationState) {
         if (state is DestinationState.Known) {
+            val dest = state.lat to state.lng
+            if (dest == proximityDest) return // 같은 좌표면 알림을 다시 등록하지 않는다
+            proximityDest = dest
             sdkHub.location.watchProximity(state.lat, state.lng, ARRIVAL_RADIUS_M.toFloat()) {
                 if (controller.state != SessionState.CARD) {
                     Log.i(FLOW_TAG, "proximity enter")
@@ -170,24 +177,35 @@ class PleoryApp : Application() {
                 }
             }
         } else {
+            proximityDest = null
             sdkHub.location.clearProximity()
         }
     }
 
+    private var proximityDest: Pair<Double, Double>? = null
     private var gearFallback: ParkedFallback? = null
+    private var gearFallbackOn = false
+
+    private fun stopGearFallback() {
+        if (!gearFallbackOn) return
+        gearFallbackOn = false
+        Log.i(FLOW_TAG, "real gear event: fallback off")
+    }
 
     /** 기어를 못 읽는 차량: 위치 속도와 UX 제한으로 P/D 를 만들어 같은 경로(gearEvent)로 보낸다. */
     private fun startGearFallback() {
+        gearFallbackOn = true
         if (gearFallback != null) return
         val f = ParkedFallback().also { gearFallback = it }
         Log.w(FLOW_TAG, "gear unsupported: speed/UX fallback on")
         var prev: TrackSample? = null
         sdkHub.location.addListener { fix ->
+            if (!gearFallbackOn) return@addListener
             val cur = TrackSample(fix.timeMillis, fix.lat, fix.lng)
             prev?.let { p -> f.onSpeed(cur.atMillis, TrackMath.speedKmh(p, cur))?.let(::gearEvent) }
             prev = cur
         }
-        sdkHub.uxRestrictions.addListener { required -> f.onUx(required)?.let(::gearEvent) }
+        sdkHub.uxRestrictions.addListener { required -> if (gearFallbackOn) f.onUx(required)?.let(::gearEvent) }
         f.onUx(sdkHub.uxRestrictions.isDistractionOptimizationRequired)
     }
 

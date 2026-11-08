@@ -53,10 +53,12 @@ sealed interface SessionCommand {
  * 회차(round)·세대(generation) 카운터를 안에서 관리하고, 오래된 결과는 버린다.
  */
 class SessionStateMachine {
+    @Volatile
     var state: SessionState = SessionState.OFF
         private set
 
     private val trigger = CardTrigger()
+    @Volatile
     private var ignitionOn = false
     private var roundCounter = 0
     private var activeRound: Int? = null
@@ -161,12 +163,25 @@ class SessionStateMachine {
     }
 
     /**
-     * 세션이 열려 있을 때만 받는다. Gleo 경로라 "적어뒀어"는 말하지 않는다 — 실측상 우리 TTS 의 오디오 포커스
+     * 외부 메모를 받을 수 있는가. 호출자가 응답(성공/실패)을 먼저 정해야 해서 어느 스레드에서든 읽을 수 있게 열어 둔다
+     * (state·ignitionOn 이 volatile). 읽은 뒤 상태가 바뀔 수는 있으나 그 틈은 수용한다.
+     * 받는 상태: 세션이 열려 있음, 카드 표시 중(현재 카드 세션에 붙인다), 카드를 닫은 뒤 시동이 켜진 채(CLOSED → 새 세션을 연다).
+     * 시동이 꺼졌거나(OFF, 시동 OFF 로 닫힌 CLOSED) 빈 문자열이면 받지 않는다.
+     */
+    fun acceptsExternalNote(text: String): Boolean = text.isNotBlank() && when (state) {
+        SessionState.SESSION_OPEN, SessionState.LISTENING, SessionState.CARD -> true
+        SessionState.CLOSED -> ignitionOn
+        SessionState.OFF -> false
+    }
+
+    /**
+     * [acceptsExternalNote] 일 때만 받는다. Gleo 경로라 "적어뒀어"는 말하지 않는다 — 실측상 우리 TTS 의 오디오 포커스
      * 요청이 Gleo 를 LOSS_TRANSIENT 로 끊어 Sleeping 으로 보내고, 그러면 Gleo 가 우리 응답을 Reject 한다.
      * 확인 음성은 응답 mode=voice 로 Gleo 가 낸다.
      */
     private fun onExternalNote(text: String, out: MutableList<SessionCommand>) {
-        if (state == SessionState.OFF || state == SessionState.CLOSED || text.isBlank()) return
+        if (!acceptsExternalNote(text)) return
+        if (state == SessionState.CLOSED) newSession(out) // 카드를 닫은 같은 시동 안의 메모는 새 세션에 담는다
         val id = ++utteranceCounter
         out += SessionCommand.SaveUtterance(id, text, 0)
         startStructure(id, out)

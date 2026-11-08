@@ -39,6 +39,9 @@ class ParkedFallback(private val holdMs: Long = 5_000L) {
     private fun emit(g: Gear): Gear? = if (emitted == g) null else g.also { emitted = it }
 
     companion object {
+        /** 기어 첫 조회가 비었을 때 대체 판정을 켤지: 리스너 등록이 실패했거나 차량이 없을 때만(true). */
+        fun shouldStart(current: Gear?, listenerSupported: Boolean): Boolean = current == null && !listenerSupported
+
         const val PARKED_KMH = 2.0
         const val MOVING_KMH = 5.0
     }

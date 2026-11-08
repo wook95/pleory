@@ -17,6 +17,14 @@ class GleoActionReceiverTest {
     }
 
     @Test
+    fun inputLimits() {
+        assertNull(GleoActionReceiver.inputProblem("a".repeat(GleoActionReceiver.MAX_NOTE_CHARS), 100))
+        assertEquals("blank note", GleoActionReceiver.inputProblem(" ", 0)?.first)
+        assertEquals("too long", GleoActionReceiver.inputProblem("a".repeat(GleoActionReceiver.MAX_NOTE_CHARS + 1), 0)?.first)
+        assertEquals("too long", GleoActionReceiver.inputProblem("ok", GleoActionReceiver.MAX_PARAM_CHARS + 1)?.first)
+    }
+
+    @Test
     fun otherActionsRejected() {
         assertNull(GleoActionReceiver.functionOf(null))
         assertNull(GleoActionReceiver.functionOf("XADD_DRIVE_NOTE"))

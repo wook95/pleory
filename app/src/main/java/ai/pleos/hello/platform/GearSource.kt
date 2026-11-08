@@ -9,8 +9,9 @@ enum class Gear { P, D, R, N, OTHER }
 
 interface GearSource {
     /**
-     * 기어를 실제로 읽을 수 있는가. Vehicle SDK 의 Gear API 에는 check*Capabilities 가 없어서(javap 확인)
-     * 등록 예외나 첫 조회 실패로 판단한다. false 면 속도·UX 기반 대체 판정을 쓴다.
+     * 기어 이벤트를 받을 수 있는가. Vehicle SDK 의 Gear API 에는 check*Capabilities 가 없어서(javap 확인)
+     * 리스너 등록 실패나 차량 없음으로 판단한다. 첫 조회(current) 한 번의 실패는 영향을 주지 않는다 —
+     * 리스너가 살아 있으면 이후 이벤트가 온다. false 면 속도·UX 기반 대체 판정을 쓴다.
      */
     val supported: Boolean
     /** 현재 기어. 조회 실패면 null. */
@@ -66,7 +67,7 @@ class PleosGearSource(private val post: Post) : GearSource {
             { g -> post { Log.i(TAG, "gear supported: current=$g"); onResult(g.toGear()) } },
             { e ->
                 Log.w(TAG, "gear current failed: $e")
-                post { supported = false; onResult(null) }
+                post { onResult(null) }
             },
         )
     }

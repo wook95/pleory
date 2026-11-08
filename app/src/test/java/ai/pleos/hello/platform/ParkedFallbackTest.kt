@@ -6,6 +6,13 @@ import org.junit.Test
 
 class ParkedFallbackTest {
     @Test
+    fun `첫 조회가 비어도 리스너가 살아 있으면 대체 판정을 켜지 않는다`() {
+        org.junit.Assert.assertFalse(ParkedFallback.shouldStart(null, listenerSupported = true))
+        org.junit.Assert.assertTrue(ParkedFallback.shouldStart(null, listenerSupported = false))
+        org.junit.Assert.assertFalse(ParkedFallback.shouldStart(Gear.P, listenerSupported = false))
+    }
+
+    @Test
     fun parkedAfterHold() {
         val f = ParkedFallback(5_000)
         assertNull(f.onSpeed(0, 0.0))

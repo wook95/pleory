@@ -29,6 +29,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
@@ -94,6 +95,16 @@ class SessionController(
     private var sessionDeleted = false
     private var presetItems: List<StructuredItem>? = null
 
+    /** 저장소에 쓰는 진행 중 작업. 전체 삭제가 이들이 끝난 뒤에 지우도록 추적한다. */
+    private val dbJobs = java.util.concurrent.CopyOnWriteArraySet<Job>()
+
+    private fun launchDb(block: suspend CoroutineScope.() -> Unit): Job {
+        val job = scope.launch(block = block)
+        dbJobs += job
+        job.invokeOnCompletion { dbJobs -= job }
+        return job
+    }
+
     val state: SessionState get() = machine.state
 
     /** 요약을 재생 중이면 그 문장(자막), 아니면 null. 직렬 경로에서만 읽는다. */
@@ -134,25 +145,34 @@ class SessionController(
         onStateChanged?.invoke(machine.state)
     }
 
-    /** Gleo 음성 액션으로 받은 메모를 STT 최종 결과와 같은 경로로 저장한다. */
-    fun addNoteFromVoice(text: String) = post(SessionEvent.ExternalNote(text))
+    /**
+     * Gleo 음성 액션으로 받은 메모를 STT 최종 결과와 같은 경로로 저장한다. 머신이 받지 않을 상태면 false
+     * (호출자가 Gleo 에 실패로 회신한다). 어느 스레드에서든 부를 수 있다.
+     */
+    fun addNoteFromVoice(text: String): Boolean {
+        if (!machine.acceptsExternalNote(text)) return false
+        post(SessionEvent.ExternalNote(text))
+        return true
+    }
 
     /**
      * Gleo 가 구조화까지 해서 넘긴 메모(ADD_DRIVE_NOTES). [itemsJson] 은 PRD §4-1 의 items 배열 JSON 이다.
      * 계약에 맞으면 구조화기(Gemini)를 건너뛰고 그 항목으로 커밋하고, 안 맞으면 원문만 받은 것처럼 처리한다.
      */
-    fun addStructuredNoteFromVoice(original: String, itemsJson: String) {
+    fun addStructuredNoteFromVoice(original: String, itemsJson: String): Boolean {
         val parsed = StructureContract.parse("{\"items\":$itemsJson}")
         if (parsed !is StructureResult.Ok) {
-            trace("gleo items rejected: ${(parsed as StructureResult.Failed).reason}")
-            addNoteFromVoice(original)
-            return
+            // 거절 사유에 모델 값이 섞일 수 있어 릴리스 로그에는 남기지 않는다
+            trace(if (BuildConfig.DEBUG) "gleo items rejected: ${(parsed as StructureResult.Failed).reason}" else "gleo items rejected")
+            return addNoteFromVoice(original)
         }
+        if (!machine.acceptsExternalNote(original)) return false
         scope.launch {
             presetItems = parsed.items
             dispatch(SessionEvent.ExternalNote(original))
             presetItems = null
         }
+        return true
     }
 
     /** 이전에 PENDING 으로 남은 발화를 다시 구조화한다(다음 시동, D12). */
@@ -188,12 +208,14 @@ class SessionController(
 
     /**
      * 모든 기록을 지운다(F12). 진행 중인 세션 행도 함께 지워지므로 이어지는 저장이 FK 에 걸리지 않게
-     * 대기 중인 발화 맵을 비우고, 다음 저장 때 같은 세션을 빈 행으로 다시 만든다. 끝나면 [onDone] 을 직렬 경로에서 부른다.
+     * 대기 중인 발화 맵을 먼저 비워 새 커밋을 막고, 이미 저장소에 쓰는 중인 작업이 끝나길 기다린 뒤 지운다.
+     * 다음 저장 때 같은 세션을 빈 행으로 다시 만든다. 끝나면 [onDone] 을 직렬 경로에서 부른다.
+     * (구조화 호출은 저장소를 건드리지 않고 결과 커밋은 맵이 비어 무시되므로 기다리지 않는다.)
      */
     fun deleteAllData(onDone: () -> Unit = {}) {
         scope.launch {
-            cardJob?.join()
             entries.clear()
+            dbJobs.toList().joinAll()
             store.deleteAll()
             sessionDeleted = true
             trace("all data deleted")
@@ -219,7 +241,7 @@ class SessionController(
         sessionId = d
         cardJob = null
         val startedAt = sessionStartedAt
-        scope.launch { d.complete(store.createSession(context.profileId(), context.segment(), startedAt)) }
+        launchDb { d.complete(store.createSession(context.profileId(), context.segment(), startedAt)) }
     }
 
     private fun execute(c: SessionCommand) {
@@ -248,7 +270,7 @@ class SessionController(
                 val session = sessionId
                 val snap = context.snapshot()
                 val at = clock.nowMillis()
-                scope.launch {
+                launchDb {
                     entry.dbId.complete(
                         store.saveUtterance(
                             Utterance(
@@ -297,7 +319,7 @@ class SessionController(
                 val info = context.endInfo()
                 val end = SessionEndCalc.compute(sessionStartedAt, endedAt, info)
                 trace("session end $end")
-                cardJob = scope.launch {
+                cardJob = launchDb {
                     store.finishSession(session.await(), endedAt, end, SessionEndCalc.downsample(info.points))
                 }
                 outputs.showCard()
@@ -317,20 +339,20 @@ class SessionController(
                 val startedAt = clock.nowMillis()
                 sessionStartedAt = startedAt
                 context.onSessionStart()
-                scope.launch { d.complete(store.createSession(context.profileId(), context.segment(), startedAt)) }
+                launchDb { d.complete(store.createSession(context.profileId(), context.segment(), startedAt)) }
             }
             SessionCommand.CloseSession -> {
                 endSummary(stopSpeech = true, notifyDone = false)
                 val session = sessionId
                 val endedAt = clock.nowMillis()
-                scope.launch { store.closeSession(session.await(), endedAt) }
+                launchDb { store.closeSession(session.await(), endedAt) }
             }
         }
     }
 
     private fun commit(key: Long, status: LlmStatus) {
         val entry = entries[key] ?: return
-        scope.launch {
+        launchDb {
             val items = if (status == LlmStatus.DONE) entry.items else listOf(StructureContract.rawFallback(entry.text))
             store.replaceItems(entry.dbId.await(), items, status)
             trace("committed $status items=${items.size} dbId=${entry.dbId.await()}")

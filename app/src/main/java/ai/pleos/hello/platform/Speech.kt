@@ -158,22 +158,26 @@ class PleosSpeechOutput(context: Context, private val post: Post) : SpeechOutput
     /** 발화 중 잡고 있는 포커스 요청. 직렬 경로에서만 읽고 쓴다. */
     private var focusRequest: AudioFocusRequest? = null
 
+    /** 포커스 요청마다 올리는 번호. 이미 놓은 요청의 늦은 포커스 변경 콜백을 거른다. */
+    private var focusSeq = 0
+    private val utterance = UtteranceTracker()
+
     override var onDone: (() -> Unit)? = null
 
     private val sdkListener = object : EventListener {
         override fun onStart() = Unit
         override fun onReady() = Unit
         override fun onDone() {
-            post { abandonFocus(); onDone?.invoke() }
+            post { if (utterance.onEnd()) { abandonFocus(); onDone?.invoke() } }
         }
 
         override fun onError(errorType: TtsError) {
             Log.w(TAG, "tts error $errorType")
-            post { abandonFocus() }
+            post { if (utterance.onEnd()) abandonFocus() }
         }
 
         override fun onStop() {
-            post { abandonFocus() }
+            post { if (utterance.onEnd()) abandonFocus() }
         }
 
         override fun onUpdatedRms(rms: Double) = Unit
@@ -203,13 +207,14 @@ class PleosSpeechOutput(context: Context, private val post: Post) : SpeechOutput
 
     override fun say(text: String) {
         if (!ready) {
-            Log.w(TAG, "tts not ready, drop '$text'")
+            Log.w(TAG, "tts not ready, drop len=${text.length}")
             return
         }
         abandonFocus()
+        val seq = ++focusSeq
         val request = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
             .setAudioAttributes(attrs)
-            .setOnAudioFocusChangeListener({ change -> post { onFocusChange(change) } }, Handler(Looper.getMainLooper()))
+            .setOnAudioFocusChangeListener({ change -> post { onFocusChange(seq, change) } }, Handler(Looper.getMainLooper()))
             .build()
         if (FocusPolicy.onRequestResult(audioManager.requestAudioFocus(request)) == FocusPolicy.Action.SKIP) {
             Log.w(TAG, "tts focus denied, skip len=${text.length}") // 요약에 발화 내용이 있어 본문은 남기지 않는다
@@ -217,19 +222,24 @@ class PleosSpeechOutput(context: Context, private val post: Post) : SpeechOutput
             return
         }
         focusRequest = request
+        utterance.begin()
         tts.setAudioAttributes(attrs)
         tts.speak(text, true)
     }
 
     override fun stop() {
-        if (ready) runCatching { tts.stop() }
+        if (ready) {
+            runCatching { tts.stop() }
+            utterance.halt()
+        }
         abandonFocus()
     }
 
-    private fun onFocusChange(change: Int) {
-        if (focusRequest == null || FocusPolicy.onFocusChange(change) == FocusPolicy.Change.KEEP) return
+    private fun onFocusChange(seq: Int, change: Int) {
+        if (seq != focusSeq || focusRequest == null || FocusPolicy.onFocusChange(change) == FocusPolicy.Change.KEEP) return
         Log.i(TAG, "tts focus lost $change")
         runCatching { tts.stop() }
+        utterance.halt()
         abandonFocus()
         onDone?.invoke()
     }

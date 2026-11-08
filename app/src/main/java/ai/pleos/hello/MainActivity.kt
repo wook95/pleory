@@ -43,6 +43,9 @@ class MainActivity : Activity() {
     private var settingsOpen = false
     private var consentRequested = false
 
+    /** 첫 주차에 동의 화면이 카드를 가려서 요약을 아직 못 들려줬다. 동의 답 뒤 카드가 뜨면 다시 읽는다. */
+    private var summaryOwed = false
+
     private val stateListener: (SessionState) -> Unit = { runOnUiThread { render(it) } }
 
     private val outputsUi = object : PleoryApp.AppOutputs.Ui {
@@ -119,7 +122,9 @@ class MainActivity : Activity() {
             consentRequested = false
         }
         val screen = ScreenGate.resolve(allowed, app.consent.needsPrompt || consentRequested, settingsOpen, state)
-        if (state == SessionState.CARD && screen != Screen.CARD) app.controller.skipSummary() // 카드가 닫히면 요약 음성도 멈춘다
+        if (state != SessionState.CARD) summaryOwed = false
+        else if (screen == Screen.CONSENT) summaryOwed = true // 동의 화면이 카드를 가린 것뿐이라 요약을 끊지 않고 뒤에 다시 읽는다
+        else if (screen != Screen.CARD) app.controller.skipSummary() // 카드가 닫히면 요약 음성도 멈춘다
         view.visibility = if (screen == Screen.S0) View.VISIBLE else View.GONE
         card.visibility = if (screen == Screen.CARD) View.VISIBLE else View.GONE
         consentView.visibility = if (screen == Screen.CONSENT) View.VISIBLE else View.GONE
@@ -128,7 +133,10 @@ class MainActivity : Activity() {
         view.setSegmentName(CardFormat.segmentName(app.sessionSegment))
         view.setSettingsVisible(allowed)
         val isCard = screen == Screen.CARD
-        if (isCard && !cardShown) loadCard()
+        if (isCard && !cardShown) {
+            loadCard()
+            if (summaryOwed) { summaryOwed = false; app.controller.replaySummary() } // 재생 중이면 컨트롤러가 무시한다
+        }
         cardShown = isCard
     }
 

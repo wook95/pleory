@@ -3,6 +3,7 @@ package ai.pleos.hello.core
 import ai.pleos.hello.core.SessionCommand.*
 import ai.pleos.hello.core.SessionEvent.*
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -64,6 +65,38 @@ class SessionStateMachineTest {
         assertTrue(send(ExternalNote("메모")).isEmpty())
         open()
         assertTrue(send(ExternalNote("  ")).isEmpty())
+    }
+
+    @Test fun 외부_메모는_카드_표시_중에도_현재_카드_세션에_붙인다() {
+        open()
+        arriveAtKnownDest()
+        assertEquals(SessionState.CARD, m.state)
+        assertTrue(m.acceptsExternalNote("우유 사기"))
+        val c = send(ExternalNote("우유 사기"))
+        assertEquals(listOf(SaveUtterance(1, "우유 사기", 0), StartStructure(1, 1)), c)
+        assertEquals(SessionState.CARD, m.state)
+    }
+
+    @Test fun 외부_메모는_카드를_닫은_뒤_시동이_켜져_있으면_새_세션을_열고_받는다() {
+        open()
+        arriveAtKnownDest()
+        send(CardClosed)
+        assertEquals(SessionState.CLOSED, m.state)
+        assertTrue(m.acceptsExternalNote("우유 사기"))
+        val c = send(ExternalNote("우유 사기"))
+        assertEquals(listOf(NewSession, ShowS0, SaveUtterance(1, "우유 사기", 0), StartStructure(1, 1)), c)
+        assertEquals(SessionState.SESSION_OPEN, m.state)
+    }
+
+    @Test fun 외부_메모는_시동이_꺼졌으면_받지_않는다() {
+        assertFalse(m.acceptsExternalNote("메모")) // OFF
+        open()
+        arriveAtKnownDest()
+        send(IgnitionOff)
+        assertEquals(SessionState.CLOSED, m.state)
+        assertFalse(m.acceptsExternalNote("메모"))
+        assertTrue(send(ExternalNote("메모")).isEmpty())
+        assertFalse(m.acceptsExternalNote(" "))
     }
 
     // --- §2-4 빠뜨리기 쉬운 전이

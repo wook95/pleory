@@ -218,6 +218,7 @@ FusedLocation 퍼미션명은 문서에서 확인해 추가한다. MainActivity�
 - **F14 휠 PTT·호출어 직접 수신은 불가** — Gleo가 음성 비서 역할을 독점한다. 대신 "PTT → Gleo → 플레오리에 적어줘 …" 간접 연동으로 바꾼다.
 - **AmbientAi API(@PrivilegedApi)·Gleo LLM은 서드파티 비공개.** Gemini를 유지한다.
 - **오디오 포커스(실측):** Pleos TTS SDK는 `USAGE_MEDIA`로 재생하고 포커스를 요청하지 않는다. 재생 전에 `setAudioAttributes(USAGE_ASSISTANT, CONTENT_TYPE_SPEECH)` + `AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK`, LOSS_TRANSIENT면 stop, 끝나면 abandon(§8-1 3번).
+- **위험: receiver는 권한 없이 exported다.** 문서화된 Gleo 호출 권한이 없어 다른 앱도 같은 action으로 메모를 넣을 수 있다. 완화: 입력 길이 상한(메모 500자, 파라미터 5,000자, items 최대 5개)과 `StructureContract` 검증, 세션이 없으면(시동 OFF) 실패 회신. 호출자 신원 검증은 Gleo 권한이 공개되면 추가한다.
 - Pleos 문의: schema 승인 없이 에뮬레이터 호출 가능 여부와 절차, invokeWord 한국어 규칙, ACTION_PARAM 형식, TTS SDK 권장 usage, AmbientAi·LLM 개방 계획.
 
 ### 8-4. Gleo 우선 구조화 (2026-11-08 결정·실측)

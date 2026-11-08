@@ -22,6 +22,7 @@ import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.delay
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.util.concurrent.CopyOnWriteArrayList
@@ -57,7 +58,11 @@ private class FakeStore : PleoryStore {
     }
     override suspend fun utterance(id: Long) = utterances[id]
     override suspend fun pendingUtterances() = utterances.values.filter { it.llmStatus == LlmStatus.PENDING }
+    @Volatile var replaceDelayMs = 0L
+    val replaceStarted = AtomicInteger()
     override suspend fun replaceItems(utteranceId: Long, items: List<StructuredItem>, status: LlmStatus) {
+        replaceStarted.incrementAndGet()
+        if (replaceDelayMs > 0) delay(replaceDelayMs)
         this.items[utteranceId] = items // 삭제 후 삽입과 같은 결과
         utterances[utteranceId] = utterances.getValue(utteranceId).copy(llmStatus = status)
         replaceCalls.incrementAndGet()
@@ -214,6 +219,31 @@ class SessionControllerTest {
         assertEquals(before + 1, store.sessionCreates.get())
     }
 
+    @Test fun deleteAll_waitsForInFlightCommit() {
+        store.replaceDelayMs = 400
+        val c = controller(RuleStructurer())
+        speak(c, TEXT)
+        awaitUntil { store.replaceStarted.get() == 1 } // 커밋이 저장소에 쓰는 중
+        val done = java.util.concurrent.CountDownLatch(1)
+        c.deleteAllData { done.countDown() }
+        assertTrue(done.await(4, java.util.concurrent.TimeUnit.SECONDS))
+        Thread.sleep(600)
+        assertTrue("삭제 뒤에 커밋이 되살아남", store.utterances.isEmpty() && store.items.isEmpty())
+    }
+
+    @Test fun addNote_rejectedWhenNoSession_acceptedAfterIgnition() {
+        val c = controller(RuleStructurer())
+        val one = "[{\"text\":\"x\",\"type\":\"todo\",\"emotion\":\"neutral\",\"keywords\":[]}]"
+        assertFalse(c.addNoteFromVoice("시동 전 메모"))
+        assertFalse(c.addStructuredNoteFromVoice("시동 전 메모", one))
+        c.post(SessionEvent.IgnitionOn)
+        awaitUntil { c.state == ai.pleos.hello.core.SessionState.SESSION_OPEN }
+        assertFalse(c.addNoteFromVoice("  "))
+        assertTrue(c.addNoteFromVoice("시동 뒤 메모"))
+        awaitUntil { store.replaceCalls.get() == 1 }
+        assertEquals(1, store.utterances.size)
+    }
+
     @Test fun gleoStructuredNote_skipsStructurer_commitsGleoItems() {
         val calls = AtomicInteger()
         val counting = object : Structurer {
@@ -224,6 +254,7 @@ class SessionControllerTest {
         }
         val c = controller(counting)
         c.post(SessionEvent.IgnitionOn)
+        awaitUntil { c.state == ai.pleos.hello.core.SessionState.SESSION_OPEN }
         c.addStructuredNoteFromVoice(
             TEXT,
             """[{"text":"내일 거래처 서류 다시 보내야 해","type":"todo","emotion":"neutral","keywords":["거래처","서류"]},""" +
@@ -249,6 +280,7 @@ class SessionControllerTest {
         }
         val c = controller(counting)
         c.post(SessionEvent.IgnitionOn)
+        awaitUntil { c.state == ai.pleos.hello.core.SessionState.SESSION_OPEN }
         c.addStructuredNoteFromVoice(TEXT, """[{"text":"x","type":"todo","emotion":"angry"}]""")
         awaitUntil { store.replaceCalls.get() == 1 }
         assertEquals(1, calls.get())
