@@ -18,6 +18,12 @@ class CardTriggerTest {
         assertFalse(t.fired())
     }
 
+    @Test fun 기어_이벤트_전에_세션이_시작돼도_주행으로_보지_않음() {
+        val t = CardTrigger().apply { resetFlags(); onDestination(DestinationState.None); onGear(Gear.P) }
+        t.onParkHeld5s()
+        assertFalse(t.fired())
+    }
+
     @Test fun 새_세션은_주행_여부를_다시_요구() {
         val t = trigger(DestinationState.None)
         t.resetFlags()

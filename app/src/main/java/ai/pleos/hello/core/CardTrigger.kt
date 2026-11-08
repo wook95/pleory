@@ -15,7 +15,7 @@ enum class Gear { P, R, N, D }
  * 세션에서 한 번도 주행(D)하지 않았으면 발동하지 않는다 — 주차 상태로 앱을 켜자마자 빈 카드가 뜨는 것을 막는다.
  */
 class CardTrigger {
-    private var gear: Gear = Gear.D
+    private var gear: Gear? = null // 첫 기어 이벤트 전에는 미확인
     private var destination: DestinationState = DestinationState.Unknown
     private var arrived = false
     private var nearDestination = false
