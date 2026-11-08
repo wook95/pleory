@@ -10,6 +10,7 @@ import ai.pleos.hello.proto.pleorycard.cardB
 import ai.pleos.hello.proto.pleorycard.cardC
 import ai.pleos.hello.proto.pleorycard.s0a
 import ai.pleos.hello.proto.pleorycard.s0b
+import ai.pleos.hello.proto.pleorycard.r2.R2Index
 
 object ProtoIndex {
     fun register() {
@@ -26,5 +27,7 @@ object ProtoIndex {
         Protos.all["pleorycard/r1/s0a-listen"] = { a -> s0a(a, listening = true) }
         Protos.all["pleorycard/r1/s0b"] = { a -> s0b(a) }
         Protos.all["pleorycard/r1/s0b-listen"] = { a -> s0b(a, listening = true) }
+
+        R2Index.register(Protos.all)
     }
 }
