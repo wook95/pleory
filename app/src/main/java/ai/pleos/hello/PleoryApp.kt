@@ -5,6 +5,8 @@ import ai.pleos.hello.app.PcmInjectableSpeechInput
 import ai.pleos.hello.app.SessionController
 import ai.pleos.hello.app.SessionOutputs
 import ai.pleos.hello.core.Clock
+import ai.pleos.hello.core.ConsentGatedStructurer
+import ai.pleos.hello.core.ScreenGate
 import ai.pleos.hello.core.DemoClock
 import ai.pleos.hello.core.DestinationState as CoreDestination
 import ai.pleos.hello.core.GeoPoint
@@ -13,6 +15,7 @@ import ai.pleos.hello.core.SessionState
 import ai.pleos.hello.core.SystemClock
 import ai.pleos.hello.core.TrackMath
 import ai.pleos.hello.core.TrackSample
+import ai.pleos.hello.data.ConsentPrefs
 import ai.pleos.hello.data.PleoryDb
 import ai.pleos.hello.data.RoomPleoryStore
 import ai.pleos.hello.data.Segment
@@ -68,6 +71,17 @@ class PleoryApp : Application() {
 
     lateinit var controller: SessionController
         private set
+    lateinit var consent: ConsentPrefs
+        private set
+
+    /** 마지막으로 받은 기어. 모르면(OTHER·미수신) null — 화면 게이트는 null 을 닫힘으로 본다. */
+    @Volatile
+    var gear: ai.pleos.hello.core.Gear? = null
+        private set
+
+    /** 기어·UX 제한이 바뀔 때 메인 스레드에서 불린다(화면 게이트 재평가용). */
+    @Volatile
+    var onGateChanged: (() -> Unit)? = null
     val clock = AppClock()
     val outputs = AppOutputs()
     lateinit var speechInput: PcmInjectableSpeechInput
@@ -78,6 +92,7 @@ class PleoryApp : Application() {
     override fun onCreate() {
         super.onCreate()
         db = PleoryDb.get(this)
+        consent = ConsentPrefs(this)
         sdkHub = SdkHub(this).also { it.start() }
         assemble()
         if (BuildConfig.DEBUG) appScope.launch { dbSelfCheck() }
@@ -88,7 +103,8 @@ class PleoryApp : Application() {
         controller = SessionController(
             store = RoomPleoryStore(db),
             // 공모전은 Gemini. 플랫폼 LLM(Gleo AI)이 서드파티에 열리면 PleosLlmStructurer로 전환 (TRD D6)
-            structurer = GeminiStructurer(),
+            // 동의가 없거나 철회됐으면 Gemini 를 부르지 않고 RAW 로 남긴다(TRD §8-1 1번)
+            structurer = ConsentGatedStructurer({ consent.llmAllowed }, GeminiStructurer(), { Log.i(FLOW_TAG, it) }),
             speechIn = speechInput,
             speechOut = sdkHub.speechOutput,
             outputs = outputs,
@@ -98,6 +114,10 @@ class PleoryApp : Application() {
             trace = { Log.i(FLOW_TAG, it) },
             logError = { msg, t -> Log.e(FLOW_TAG, msg, t) },
         )
+        sdkHub.uxRestrictions.addListener { required ->
+            Log.i(FLOW_TAG, "ux required=$required active=${sdkHub.uxRestrictions.activeRestrictions} gate=${gateAllowed()}")
+            onGateChanged?.invoke()
+        }
         sdkHub.gear.addListener { g -> gearEvent(g) }
         sdkHub.gear.current { g -> if (g != null) gearEvent(g) else startGearFallback() }
         // 시동 = 앱 세션 시작(D11). 이전 PENDING 발화는 새 세션 뒤에 재처리한다.
@@ -179,6 +199,9 @@ class PleoryApp : Application() {
     }
     private var parkScheduled = false
 
+    /** 카드·설정·동의 등 S0 밖 화면을 보여도 되는가: 기어 P, DO 제한 없음, 설정·키보드·문자열 길이 제한 비활성. */
+    fun gateAllowed() = ScreenGate.allowed(gear, sdkHub.uxRestrictions.isDistractionOptimizationRequired, sdkHub.uxRestrictions.activeRestrictions)
+
     private fun gearEvent(g: Gear) {
         if (g == Gear.P) {
             if (!parkScheduled) {
@@ -194,8 +217,10 @@ class PleoryApp : Application() {
             Gear.D -> ai.pleos.hello.core.Gear.D
             Gear.R -> ai.pleos.hello.core.Gear.R
             Gear.N -> ai.pleos.hello.core.Gear.N
-            Gear.OTHER -> return
+            Gear.OTHER -> { this.gear = null; onGateChanged?.invoke(); return }
         }
+        this.gear = core
+        onGateChanged?.invoke()
         controller.post(SessionEvent.GearChanged(core))
     }
 

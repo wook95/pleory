@@ -36,11 +36,21 @@ private class FakeStore : PleoryStore {
     val replaceCalls = AtomicInteger()
     val closed = CopyOnWriteArrayList<Long>()
     private val seq = AtomicInteger()
+    val sessions = java.util.concurrent.ConcurrentHashMap.newKeySet<Long>()
+    val sessionCreates = AtomicInteger()
 
-    override suspend fun createSession(profileId: String, segment: Segment, startedAt: Long) = 1L
+    override suspend fun createSession(profileId: String, segment: Segment, startedAt: Long): Long {
+        sessions += 1L
+        sessionCreates.incrementAndGet()
+        return 1L
+    }
+    override suspend fun deleteAll() {
+        utterances.clear(); items.clear(); sessions.clear()
+    }
     override suspend fun setSessionState(sessionId: Long, state: SessionState) = Unit
     override suspend fun closeSession(sessionId: Long, endedAt: Long) { closed += sessionId }
     override suspend fun saveUtterance(utterance: Utterance): Long {
+        check(utterance.sessionId in sessions) { "FK: 세션 없음" } // 실제 DB 의 외래 키 제약 대응
         val id = seq.incrementAndGet().toLong()
         utterances[id] = utterance.copy(id = id)
         return id
@@ -185,6 +195,23 @@ class SessionControllerTest {
         speak(c, TEXT)
         awaitUntil { store.replaceCalls.get() == 1 }
         assertEquals(LlmStatus.FAILED, store.utterances.getValue(1).llmStatus)
+    }
+
+    @Test fun deleteAll_emptiesStore_andNextSaveRecreatesSession() {
+        val c = controller(RuleStructurer())
+        speak(c, TEXT)
+        awaitUntil { store.replaceCalls.get() == 1 }
+        val done = java.util.concurrent.CountDownLatch(1)
+        c.deleteAllData { done.countDown() }
+        assertTrue(done.await(4, java.util.concurrent.TimeUnit.SECONDS))
+        assertTrue(store.utterances.isEmpty())
+        assertTrue(store.items.isEmpty())
+        assertTrue(store.sessions.isEmpty())
+        // 삭제 뒤 새 발화가 외래 키 오류 없이 저장된다
+        val before = store.sessionCreates.get()
+        c.addNoteFromVoice("삭제 뒤 메모")
+        awaitUntil { store.utterances.size == 1 }
+        assertEquals(before + 1, store.sessionCreates.get())
     }
 
     @Test fun replaceItems_isAnnotatedTransaction() {

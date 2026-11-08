@@ -17,11 +17,12 @@ import android.widget.TextView
  * S0 주행 화면(PRD §5, 시안 r1 S0-B). 데이터 바인딩 없음 — 상태 텍스트는 고정이고 버튼만 두 상태(기본/듣는 중).
  * 앱 영역 1682×1210dp(밀도 160 → 1dp = 1px). 바깥 여백 40dp.
  */
-class S0DriveView(context: Context, private val onTalk: () -> Unit) : FrameLayout(context) {
+class S0DriveView(context: Context, private val onTalk: () -> Unit, onSettings: () -> Unit = {}) : FrameLayout(context) {
 
     private val button = LinearLayout(context)
     private val glyph = MicGlyph(context)
     private val label = TextView(context)
+    private val settings = TextView(context)
 
     init {
         setBackgroundColor(BG)
@@ -49,7 +50,25 @@ class S0DriveView(context: Context, private val onTalk: () -> Unit) : FrameLayou
             setOnClickListener { onTalk() }
         }
         addView(button, LayoutParams(dp(440), dp(176), Gravity.BOTTOM or Gravity.START).apply { setMargins(dp(EDGE), 0, 0, dp(EDGE)) })
+        settings.apply {
+            text = "설정"
+            textSize = 26f
+            setTextColor(FG)
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            gravity = Gravity.CENTER
+            minHeight = dp(80)
+            minWidth = dp(160)
+            background = GradientDrawable().apply { cornerRadius = dp(16).toFloat(); setColor(Color.parseColor("#1D2A42")) }
+            visibility = GONE
+            setOnClickListener { onSettings() }
+        }
+        addView(settings, LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.END).apply { setMargins(0, dp(EDGE), dp(EDGE), 0) })
         setListening(false)
+    }
+
+    /** 설정 진입 링크. 주차(P)·제한 없음일 때만 보인다(TRD §8-1 5번). */
+    fun setSettingsVisible(visible: Boolean) {
+        settings.visibility = if (visible) VISIBLE else GONE
     }
 
     fun setListening(listening: Boolean) {

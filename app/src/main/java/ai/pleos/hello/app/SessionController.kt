@@ -88,6 +88,7 @@ class SessionController(
     private var summarySeq = 0
     private var summaryJob: Job? = null
     private var summarySpeaking = false
+    private var sessionDeleted = false
 
     val state: SessionState get() = machine.state
 
@@ -161,6 +162,21 @@ class SessionController(
         scope.launch { if (machine.state == SessionState.CARD && summaryText == null) playSummary() }
     }
 
+    /**
+     * 모든 기록을 지운다(F12). 진행 중인 세션 행도 함께 지워지므로 이어지는 저장이 FK 에 걸리지 않게
+     * 대기 중인 발화 맵을 비우고, 다음 저장 때 같은 세션을 빈 행으로 다시 만든다. 끝나면 [onDone] 을 직렬 경로에서 부른다.
+     */
+    fun deleteAllData(onDone: () -> Unit = {}) {
+        scope.launch {
+            cardJob?.join()
+            entries.clear()
+            store.deleteAll()
+            sessionDeleted = true
+            trace("all data deleted")
+            onDone()
+        }
+    }
+
     /** 카드 표시용 모델. 종료값 저장이 끝난 뒤에 읽는다. */
     suspend fun loadCard(): CardModel? {
         cardJob?.join()
@@ -169,6 +185,17 @@ class SessionController(
 
     private fun run(commands: List<SessionCommand>) {
         commands.forEach(::execute)
+    }
+
+    /** 전체 삭제로 세션 행이 사라졌다면 현재 세션을 같은 시작 시각으로 다시 만든다(저장 직전에만 불린다). */
+    private fun renewSessionIfDeleted() {
+        if (!sessionDeleted) return
+        sessionDeleted = false
+        val d = CompletableDeferred<Long>()
+        sessionId = d
+        cardJob = null
+        val startedAt = sessionStartedAt
+        scope.launch { d.complete(store.createSession(context.profileId(), context.segment(), startedAt)) }
     }
 
     private fun execute(c: SessionCommand) {
@@ -190,6 +217,7 @@ class SessionController(
             }
             is SessionCommand.Say -> speechOut.say(c.text)
             is SessionCommand.SaveUtterance -> {
+                renewSessionIfDeleted()
                 val entry = Entry(c.text, CompletableDeferred())
                 entries[c.utteranceId] = entry
                 val session = sessionId
@@ -232,6 +260,7 @@ class SessionController(
                 outputs.showS0()
             }
             SessionCommand.ShowCard -> {
+                renewSessionIfDeleted()
                 val session = sessionId
                 val endedAt = clock.nowMillis()
                 val info = context.endInfo()

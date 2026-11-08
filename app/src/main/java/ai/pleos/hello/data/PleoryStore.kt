@@ -5,6 +5,9 @@ import ai.pleos.hello.core.CardModelBuilder
 import ai.pleos.hello.core.SessionEnd
 import ai.pleos.hello.core.StructuredItem
 import ai.pleos.hello.core.TrackSample
+import android.util.Log
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /** 파이프라인이 쓰는 저장소 경계. JVM 테스트는 가짜로 바꾼다. */
 interface PleoryStore {
@@ -25,6 +28,9 @@ interface PleoryStore {
 
     /** 카드 표시용 모델. 구조화가 안 끝난 발화는 원문 한 줄로 들어간다. */
     suspend fun loadCard(sessionId: Long): CardModel? = null
+
+    /** 모든 Room 행(세션·발화·항목·궤적·장소)을 지운다. 동의 설정은 건드리지 않는다. */
+    suspend fun deleteAll() {}
 }
 
 class RoomPleoryStore(private val db: PleoryDb) : PleoryStore {
@@ -75,5 +81,13 @@ class RoomPleoryStore(private val db: PleoryDb) : PleoryStore {
         val session = db.sessions().get(sessionId) ?: return null
         val utterances = db.utterances().bySession(sessionId).map { it to db.items().byUtterance(it.id) }
         return CardModelBuilder.build(session, utterances, db.trackPoints().bySession(sessionId))
+    }
+
+    override suspend fun deleteAll(): Unit = withContext(Dispatchers.IO) {
+        db.clearAllTables()
+        val counts = listOf("session", "utterance", "item", "track_point", "place").joinToString(" ") { t ->
+            db.query("SELECT COUNT(*) FROM $t", null).use { c -> c.moveToFirst(); "$t=${c.getInt(0)}" }
+        }
+        Log.i("PleoryFlow", "deleteAll rows: $counts")
     }
 }

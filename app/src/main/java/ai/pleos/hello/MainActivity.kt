@@ -1,10 +1,15 @@
 package ai.pleos.hello
 
+import ai.pleos.hello.core.ConsentState
+import ai.pleos.hello.core.Screen
+import ai.pleos.hello.core.ScreenGate
 import ai.pleos.hello.core.SessionEvent
 import ai.pleos.hello.core.SessionState
 import ai.pleos.hello.platform.Gear
+import ai.pleos.hello.ui.ConsentView
 import ai.pleos.hello.ui.S0DriveView
 import ai.pleos.hello.ui.S1CardView
+import ai.pleos.hello.ui.SettingsView
 import android.Manifest
 import android.app.Activity
 import android.content.pm.PackageManager
@@ -28,9 +33,14 @@ class MainActivity : Activity() {
     private val app get() = application as PleoryApp
     private lateinit var view: S0DriveView
     private lateinit var card: S1CardView
+    private lateinit var consentView: ConsentView
+    private lateinit var settingsView: SettingsView
     private val uiScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var cardLoad: Job? = null
     private var cardShown = false
+    private var lastState = SessionState.OFF
+    private var settingsOpen = false
+    private var consentRequested = false
 
     private val stateListener: (SessionState) -> Unit = { runOnUiThread { render(it) } }
 
@@ -41,21 +51,36 @@ class MainActivity : Activity() {
     }
     private var permissionAsked = false
 
+    private val gateListener: () -> Unit = { runOnUiThread { render(lastState) } }
+
     private val gearListener: (Gear) -> Unit = { if (it == Gear.P) requestPermissionsIfParked() }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        view = S0DriveView(this) { app.controller.post(SessionEvent.TalkTapped) }
+        view = S0DriveView(this, { app.controller.post(SessionEvent.TalkTapped) }, ::openSettings)
         card = S1CardView(
             this,
             onReplay = { app.controller.replaySummary() },
             onSkip = { app.controller.skipSummary() },
             onEdit = { Log.i(PleoryApp.FLOW_TAG, "tap 수정 (P1)") },
             onQr = { Log.i(PleoryApp.FLOW_TAG, "tap 폰에서 열기 (P1)") },
+            onSettings = ::openSettings,
+        ).apply { visibility = View.GONE }
+        // 동의는 두 버튼만 인정한다. 뒤로 가기·자동 수락은 동의로 치지 않는다.
+        consentView = ConsentView(this, onAgree = { answer { it.grant(app.clock.nowMillis()) } }, onDecline = { answer { it.decline(app.clock.nowMillis()) } })
+            .apply { visibility = View.GONE }
+        settingsView = SettingsView(
+            this,
+            onWithdraw = { app.consent.withdraw(app.clock.nowMillis()); Log.i(PleoryApp.FLOW_TAG, "consent withdrawn"); settingsView.bind(app.consent.effective, app.consent.at); render(lastState) },
+            onConsent = { consentRequested = true; render(lastState) },
+            onDeleteAll = { app.controller.deleteAllData { runOnUiThread { settingsView.showDeleted() } } },
+            onClose = { closeSettings() },
         ).apply { visibility = View.GONE }
         setContentView(FrameLayout(this).apply {
             addView(view)
             addView(card)
+            addView(settingsView)
+            addView(consentView)
         })
     }
 
@@ -63,6 +88,7 @@ class MainActivity : Activity() {
         super.onStart()
         app.controller.onStateChanged = stateListener
         app.outputs.ui = outputsUi
+        app.onGateChanged = gateListener
         render(app.controller.state)
         card.setSummary(app.controller.summaryText)
         app.sdkHub.gear.addListener(gearListener)
@@ -74,6 +100,7 @@ class MainActivity : Activity() {
         // 다른 인스턴스가 이미 등록했다면(이전 Activity 의 onStop 이 늦게 오는 경우) 건드리지 않는다.
         if (app.controller.onStateChanged === stateListener) app.controller.onStateChanged = null
         if (app.outputs.ui === outputsUi) app.outputs.ui = null
+        if (app.onGateChanged === gateListener) app.onGateChanged = null
         super.onStop()
     }
 
@@ -82,13 +109,50 @@ class MainActivity : Activity() {
         super.onDestroy()
     }
 
+    /** 컨트롤러 상태와 화면 게이트(주차·제한 없음)·동의·설정 열림을 합쳐 보일 화면 하나를 고른다. */
     private fun render(state: SessionState) {
-        val isCard = state == SessionState.CARD
-        view.visibility = if (isCard) View.GONE else View.VISIBLE
-        card.visibility = if (isCard) View.VISIBLE else View.GONE
+        lastState = state
+        val allowed = app.gateAllowed()
+        if (!allowed) {
+            settingsOpen = false
+            consentRequested = false
+        }
+        val screen = ScreenGate.resolve(allowed, app.consent.needsPrompt || consentRequested, settingsOpen, state)
+        if (state == SessionState.CARD && screen != Screen.CARD) app.controller.skipSummary() // 카드가 닫히면 요약 음성도 멈춘다
+        view.visibility = if (screen == Screen.S0) View.VISIBLE else View.GONE
+        card.visibility = if (screen == Screen.CARD) View.VISIBLE else View.GONE
+        consentView.visibility = if (screen == Screen.CONSENT) View.VISIBLE else View.GONE
+        settingsView.visibility = if (screen == Screen.SETTINGS) View.VISIBLE else View.GONE
         view.setListening(state == SessionState.LISTENING)
+        view.setSettingsVisible(allowed)
+        val isCard = screen == Screen.CARD
         if (isCard && !cardShown) loadCard()
         cardShown = isCard
+    }
+
+    private fun answer(record: (ai.pleos.hello.data.ConsentPrefs) -> Unit) {
+        record(app.consent)
+        consentRequested = false
+        Log.i(PleoryApp.FLOW_TAG, "consent ${app.consent.state}")
+        if (settingsOpen) settingsView.bind(app.consent.effective, app.consent.at)
+        render(lastState)
+    }
+
+    private fun openSettings() {
+        if (!app.gateAllowed()) return
+        settingsOpen = true
+        settingsView.bind(app.consent.effective, app.consent.at)
+        render(lastState)
+    }
+
+    private fun closeSettings() {
+        settingsOpen = false
+        render(lastState)
+    }
+
+    @Deprecated("Deprecated in Java")
+    override fun onBackPressed() {
+        if (settingsOpen) closeSettings() else super.onBackPressed()
     }
 
     /** 카드 내용을 DB 에서 다시 읽는다. 종료값 저장이 끝난 뒤에 읽는다(컨트롤러가 보장). */

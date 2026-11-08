@@ -39,6 +39,7 @@ class S1CardView(
     private val onSkip: () -> Unit,
     private val onEdit: () -> Unit,
     private val onQr: () -> Unit,
+    private val onSettings: () -> Unit = {},
 ) : LinearLayout(context) {
 
     private val route = RouteView(context)
@@ -83,6 +84,7 @@ class S1CardView(
                 addView(button("15초 요약 듣기", true) { onReplay() }, lp(WRAP_CONTENT, WRAP_CONTENT))
                 addView(button("수정", false) { onEdit() }, lp(WRAP_CONTENT, WRAP_CONTENT).m(l = dp(14)))
                 addView(button("폰에서 열기", false) { onQr() }, lp(WRAP_CONTENT, WRAP_CONTENT).m(l = dp(14)))
+                addView(button("설정", false) { onSettings() }, lp(WRAP_CONTENT, WRAP_CONTENT).m(l = dp(14)))
             }, lp().m(t = dp(24)))
         }, lp(0, MATCH_PARENT, 1f))
     }

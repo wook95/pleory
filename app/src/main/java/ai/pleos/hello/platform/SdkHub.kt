@@ -58,6 +58,11 @@ class SdkHub(private val context: Context) {
         handler.post { fakeableGear.setOverride(g) }
     }
 
+    /** 디버그 전용: UX 제한 상태를 강제한다(true=제한, false=없음, null=실제 값). */
+    fun setUxOverride(required: Boolean?) {
+        handler.post { carUx.setOverride(required) }
+    }
+
     /** 디버그 전용: 가짜 목적지를 내보낸다. null 이면 실제 내비로 돌아간다. */
     fun setNaviOverride(s: DestinationState?) {
         handler.post { fakeableNavi.setOverride(s) }
