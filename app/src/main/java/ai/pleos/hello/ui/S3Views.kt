@@ -103,7 +103,7 @@ class ConsentView(context: Context, onAgree: () -> Unit, onDecline: () -> Unit) 
     }
 }
 
-/** S3 설정(최소): 동의 상태, 동의 철회/동의, 2단계 확인을 거치는 전체 삭제. */
+/** S3 설정(최소): 동의 상태, 동의 철회/동의, 2단계 확인을 거치는 전체 삭제, 문의·신고 연락처. */
 class SettingsView(
     context: Context,
     private val onWithdraw: () -> Unit,
@@ -142,6 +142,16 @@ class SettingsView(
                 Kit.run { lp().m(t = Kit.dp(context, 8)) },
             )
             addView(deleteBox, Kit.run { lp().m(t = Kit.dp(context, 20)) })
+        }, Kit.run { lp().m(t = Kit.dp(context, 20)) })
+        // 심사 가이드: AI 생성 콘텐츠 앱은 사용자 신고 경로가 필요하다(PRD v4 F9·F12)
+        addView(Kit.col(context).apply {
+            background = GradientDrawable().apply { cornerRadius = Kit.dp(context, 14).toFloat(); setColor(Kit.SURFACE) }
+            setPadding(Kit.dp(context, 28), Kit.dp(context, 22), Kit.dp(context, 28), Kit.dp(context, 22))
+            addView(Kit.text(context, 24f, Kit.ACCENT, 700).apply { text = "문의·신고" })
+            addView(
+                Kit.text(context, Kit.BODY_SP, Kit.FG).apply { text = "AI가 정리한 내용이 부적절하거나 앱에 문제가 있으면 알려 주세요. $CONTACT_EMAIL" },
+                Kit.run { lp().m(t = Kit.dp(context, 8)) },
+            )
         }, Kit.run { lp().m(t = Kit.dp(context, 20)) })
         addView(notice, Kit.run { lp().m(t = Kit.dp(context, 24)) })
     }
@@ -189,4 +199,9 @@ class SettingsView(
     }
 
     private fun fmt(at: Long) = SimpleDateFormat("M월 d일 HH:mm", Locale.KOREA).format(Date(at))
+
+    private companion object {
+        /** 임시 연락처. 제출 전 실제 주소로 바꾼다(README 개인정보 처리). */
+        const val CONTACT_EMAIL = "pleory.team@example.com"
+    }
 }
