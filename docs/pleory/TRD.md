@@ -219,3 +219,16 @@ FusedLocation 퍼미션명은 문서에서 확인해 추가한다. MainActivity�
 - **AmbientAi API(@PrivilegedApi)·Gleo LLM은 서드파티 비공개.** Gemini를 유지한다.
 - **오디오 포커스(실측):** Pleos TTS SDK는 `USAGE_MEDIA`로 재생하고 포커스를 요청하지 않는다. 재생 전에 `setAudioAttributes(USAGE_ASSISTANT, CONTENT_TYPE_SPEECH)` + `AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK`, LOSS_TRANSIENT면 stop, 끝나면 abandon(§8-1 3번).
 - Pleos 문의: schema 승인 없이 에뮬레이터 호출 가능 여부와 절차, invokeWord 한국어 규칙, ACTION_PARAM 형식, TTS SDK 권장 usage, AmbientAi·LLM 개방 계획.
+
+### 8-4. Gleo 우선 구조화 (2026-11-08 결정·실측)
+
+- 사용자 결정: **Gleo 먼저, 정말 안 되면 Gemini.**
+- **Gleo 음성 경로는 Gleo가 구조화한다.** 스키마에 `ADD_DRIVE_NOTES{original, items:array}`를 두면 Gleo(gpt-4o 기반 함수 호출)가 항목·유형·감정·키워드를 채워 보낸다. 받은 items는 `StructureContract`로 검증해 그대로 저장한다(Gemini 호출 없음). 계약 위반이나 `ADD_DRIVE_NOTE{note}`(원문만)로 오면 Gemini, 그것도 실패하면 RAW.
+- **화면 버튼 경로는 Gemini를 유지한다.** 서드파티가 Gleo에 텍스트를 넘기는 공개 API가 없다. `ai.umos.intent.action.ASR` 테스트 broadcast는 개발용이라 제품에 쓰지 않는다. Pleos LLM SDK는 권한 없음(§7-1).
+- 실측으로 확인한 Gleo 동작(문서와 다른 점 포함):
+  - action 이름은 `ai.pleos.hello.ADD_DRIVE_NOTE`처럼 패키지가 붙어서 온다.
+  - 우리 TTS가 포커스를 잡으면 Gleo가 응답을 거부한다 → Gleo 경로에서는 "적어뒀어"를 말하지 않고 응답 mode=voice.
+  - 에뮬레이터에서는 스키마 승인 없이 호출된다(blacklist 비어 있음). 라우팅은 비결정적이다 — "플레오리 앱에서 …"가 안정적.
+  - 지연: 주입부터 수신까지 약 1.7~3.4초.
+- 테스트 주입: `adb shell am broadcast --user 10 -a ai.umos.intent.action.ASR -p ai.umos.ambientai --es ASR "'플레오리 앱에서 항목별로 나눠서 적어줘, …'"`
+- Pleos 문의: 실차 승인 필요 여부, 패키지 접두 action 이름, Gleo 경로 발화의 플랫폼 처리 범위(개인정보 고지 문구에 반영).
