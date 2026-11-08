@@ -43,6 +43,9 @@ adb logcat -s PleosHello:I
 - 에뮬레이터: on-device LLM 비활성. on-device STT·TTS 한국어 동작 — 로케일은 `Locale.KOREA`(`Locale.KOREAN` 은 unsupported).
 - TTS 는 `initialize(listener)` 성공 뒤에 `addEventListener` (먼저 부르면 lateinit 크래시).
 - Odometer 는 에뮬레이터에서 0.0, trip 거리는 ERROR_NOT_SUPPORTED_PROPERTY.
+- 공식 샘플: github.com/Pleos-Playground 의 `pleos-sample-vehicle-app`, `-navi-app`, `-fusedlocation-app` (LICENSE 없음 → 패턴만 참고, 코드 복사 금지).
+  Pleos 전용 테마·폰트·버튼 dp 리소스는 샘플에 없다(최소 터치 48dp 만 확인). 샘플 vehicle 의 libs.versions.toml 은 404 인 2.3.1 을 가리켜 그대로는 빌드 안 된다.
+  FusedLocation 순서: `isSupported()` → 권한 허용 → `initialize()` → 콜백 등록. 근접 알림 `addProximityAlert` 도 있다.
 - SDK 스파이크 화면: `adb shell am start -n ai.pleos.hello/.spike.SpikeActivity`, `adb logcat -s PleorySpike:I` (debug 전용).
 
 ## 권한
@@ -52,7 +55,9 @@ adb logcat -s PleosHello:I
   에뮬레이터 수동 부여: `adb shell pm grant --user 10 ai.pleos.hello pleos.car.permission.FUSED_LOCATION` (+ ACCESS_FINE/COARSE_LOCATION).
   `adb shell pm grant` 는 예외를 내지만 `dumpsys package ai.pleos.hello` 에서 `granted=true` 면 정상이다.
 - 이름 체계: `pleos.car.permission.{CAR_X, CONTROL_CAR_X, PRIVATE_CAR_X}` — 조회는 `CAR_`, 제어(set)는 `CONTROL_CAR_`.
-  X = CLIMATE, DOORS, DRIVE, ENERGY, INFO, LIGHTS, MIRRORS, SAFETY, SEATS, TOLL, WINDOWS.
+  X = CLIMATE, DOORS, DRIVE, ENERGY, INFO, LIGHTS, MIRRORS, SAFETY, SEATS, TOLL, WINDOWS (Vehicle AAR 기준).
+  이 목록은 전부가 아니다 — 공식 샘플 매니페스트에는 `CAR_SPEED`, `CAR_POWERTRAIN`, `CAR_MILEAGE`, `CAR_TIRES`, `READ_*` 계열도 있다.
+  내비: `NAVI_ROUTE`(조회), `NAVI_ROUTE_SEARCH`(경로 요청), `NAVI_CUSTOM_MAP`.
   어떤 API 가 어떤 권한을 쓰는지는 문서로 확인. 목록 자체는 AAR `classes.jar` 를 풀어 `grep -rhoa 'pleos\.car\.permission\.[A-Z_]*'`.
 
 ## 에뮬레이터
