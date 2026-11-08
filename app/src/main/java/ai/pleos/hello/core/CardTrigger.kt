@@ -11,14 +11,14 @@ enum class Gear { P, R, N, D }
 
 /**
  * 카드 표시 조건(TRD D9): 기어 P AND (내비 도착 OR 알려진 목적지 300m 이내 OR 목적지 없음 확정 + P 5초).
- * 목적지 변경이나 기어 P 이탈 때 도착 관련 플래그를 초기화한다. 목적지 미확인은 5초 규칙으로 발동하지 않는다.
+ * 기어 P 이탈이나 새 목적지(Known) 때 도착 관련 플래그를 초기화한다. 목적지 미확인은 5초 규칙으로 발동하지 않는다.
+ * 도착(내비 도착·알려진 목적지 근접)은 래치다 — 도착 뒤 내비가 안내를 끝내 목적지가 없음·미확인으로 바뀌어도 유지된다.
  * 세션에서 한 번도 주행(D)하지 않았으면 발동하지 않는다 — 주차 상태로 앱을 켜자마자 빈 카드가 뜨는 것을 막는다.
  */
 class CardTrigger {
     private var gear: Gear? = null // 첫 기어 이벤트 전에는 미확인
     private var destination: DestinationState = DestinationState.Unknown
-    private var arrived = false
-    private var nearDestination = false
+    private var arrivedLatch = false // 이번 구간에 도착했다. 목적지 없음·미확인으로는 지워지지 않는다
     private var parkHeld5s = false
     private var droveThisSession = false
 
@@ -30,24 +30,23 @@ class CardTrigger {
 
     fun onDestination(d: DestinationState) {
         destination = d
-        clearFlags()
+        if (d == DestinationState.Known) clearFlags() else parkHeld5s = false
     }
 
-    fun onArrived() { arrived = true }
+    fun onArrived() { arrivedLatch = true }
 
-    fun onLocationNearDest() { nearDestination = true }
+    fun onLocationNearDest() { if (destination == DestinationState.Known) arrivedLatch = true }
 
     /** P 상태가 5초 지속됐다는 통지. P가 아니면 무시. */
     fun onParkHeld5s() { if (gear == Gear.P) parkHeld5s = true }
 
     fun fired(): Boolean = gear == Gear.P && droveThisSession && (
-        arrived ||
-            (nearDestination && destination == DestinationState.Known) ||
+        arrivedLatch ||
             (parkHeld5s && destination == DestinationState.None)
         )
 
     /** [fired] 가 목적지 도착(내비 도착 또는 알려진 목적지 근접)으로 참인가. 대체 판정(P 5초)만으로는 false. */
-    fun firedByArrival(): Boolean = fired() && (arrived || (nearDestination && destination == DestinationState.Known))
+    fun firedByArrival(): Boolean = fired() && arrivedLatch
 
     /** 새 세션 시작 시. 기어와 목적지는 현재 값을 유지하고 도착 플래그와 주행 여부를 비운다. */
     fun resetFlags() {
@@ -56,8 +55,7 @@ class CardTrigger {
     }
 
     private fun clearFlags() {
-        arrived = false
-        nearDestination = false
+        arrivedLatch = false
         parkHeld5s = false
     }
 }

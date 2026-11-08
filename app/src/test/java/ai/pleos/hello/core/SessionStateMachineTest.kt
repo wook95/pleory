@@ -378,4 +378,22 @@ class SessionStateMachineTest {
         assertTrue(c.isEmpty()) // 도착 플래그는 D에서 초기화됨
         assertTrue(ShowCard in send(Arrived))
     }
+
+    @Test fun 도착_뒤_목적지가_없음으로_바뀌어도_카드는_도착으로_뜸() {
+        send(DestinationChanged(DestinationState.Known))
+        open()
+        send(Arrived) // 주행 중 내비 도착, 이어서 안내 종료
+        send(DestinationChanged(DestinationState.Unknown), DestinationChanged(DestinationState.None))
+        val c = send(GearChanged(Gear.P))
+        assertTrue(c.contains(ShowCard))
+        assertTrue(m.cardByArrival)
+    }
+
+    @Test fun 도착_없이_목적지_없음_P5초_카드는_도착이_아님() {
+        send(DestinationChanged(DestinationState.None))
+        open()
+        send(GearChanged(Gear.P), ParkHeld5s)
+        assertEquals(SessionState.CARD, m.state)
+        assertFalse(m.cardByArrival)
+    }
 }

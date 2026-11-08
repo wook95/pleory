@@ -102,4 +102,32 @@ class CardTriggerTest {
         assertTrue(fallback.fired())
         assertFalse(fallback.firedByArrival())
     }
+
+    @Test fun 도착_뒤_안내_종료로_목적지_없음이_되어도_도착으로_발동() {
+        val t = CardTrigger().apply { onDestination(DestinationState.Known); onGear(Gear.D) }
+        t.onArrived() // 주행 중 내비 도착
+        t.onDestination(DestinationState.Unknown) // 안내 종료 → 목적지 변경 → 빈 목적지
+        t.onDestination(DestinationState.None)
+        t.onGear(Gear.P)
+        t.onParkHeld5s()
+        assertTrue(t.fired())
+        assertTrue(t.firedByArrival())
+    }
+
+    @Test fun 근접도_목적지_없음으로_바뀌어도_도착으로_남음() {
+        val t = CardTrigger().apply { onDestination(DestinationState.Known); onGear(Gear.D) }
+        t.onLocationNearDest()
+        t.onDestination(DestinationState.None)
+        t.onGear(Gear.P)
+        assertTrue(t.firedByArrival())
+    }
+
+    @Test fun 도착_없이_목적지_없음_P5초는_도착이_아님() {
+        val t = CardTrigger().apply { onDestination(DestinationState.Known); onGear(Gear.D) }
+        t.onDestination(DestinationState.None)
+        t.onGear(Gear.P)
+        t.onParkHeld5s()
+        assertTrue(t.fired())
+        assertFalse(t.firedByArrival())
+    }
 }
