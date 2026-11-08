@@ -91,11 +91,19 @@ class SdkHub(private val context: Context) {
             _uxRestrictions.value = SdkState.FAILED
             Log.w(TAG, "car ux manager failed: $e")
         }
-        _location.value = pleosLocation.init()
-        Log.i(TAG, "location ${_location.value}")
+        // 위치는 권한을 받은 뒤 initLocation() 에서 초기화한다(권한 전 initialize 는 콜백이 오지 않는다)
         pleosNavi.init { _navi.value = it; Log.i(TAG, "navi $it") }
         pleosSpeechInput.init { _stt.value = it; Log.i(TAG, "stt $it") }
         pleosSpeechOutput.init { _tts.value = it; Log.i(TAG, "tts $it") }
+    }
+
+    /** 위치 권한이 있을 때 한 번 초기화하고, 준비되면 구독을 시작한다. 직렬 경로에서 호출한다. */
+    fun initLocation() {
+        if (_location.value != SdkState.READY) {
+            _location.value = pleosLocation.init()
+            Log.i(TAG, "location ${_location.value}")
+        }
+        if (_location.value == SdkState.READY) pleosLocation.start()
     }
 
     fun release() {

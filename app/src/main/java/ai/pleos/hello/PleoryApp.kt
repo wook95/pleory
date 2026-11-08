@@ -167,7 +167,7 @@ class PleoryApp : Application() {
     /** 위치 권한이 있으면 위치 구독을 시작한다. 권한 응답 뒤에도 호출한다. */
     fun startLocationIfPermitted() {
         val ok = LOCATION_PERMISSIONS.all { checkSelfPermission(it) == PackageManager.PERMISSION_GRANTED }
-        if (ok) sdkHub.handler.post { sdkHub.location.start() }
+        if (ok) sdkHub.handler.post { sdkHub.initLocation() }
     }
 
     /** 화면 쪽 알림. 화면 전환은 컨트롤러 상태 변화로 하고, 카드 갱신과 요약 자막만 여기서 전한다. */
