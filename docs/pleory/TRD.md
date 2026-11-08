@@ -233,3 +233,11 @@ FusedLocation 퍼미션명은 문서에서 확인해 추가한다. MainActivity�
   - 지연: 주입부터 수신까지 약 1.7~3.4초.
 - 테스트 주입: `adb shell am broadcast --user 10 -a ai.umos.intent.action.ASR -p ai.umos.ambientai --es ASR "'플레오리 앱에서 항목별로 나눠서 적어줘, …'"`
 - Pleos 문의: 실차 승인 필요 여부, 패키지 접두 action 이름, Gleo 경로 발화의 플랫폼 처리 범위(개인정보 고지 문구에 반영).
+
+### 8-5. P1 리뷰 후 남은 것 (수용, 2026-11-08)
+
+- TTS 발화별 포커스 추적은 "SDK가 발화마다 종료 이벤트를 하나 낸다"는 가정에 기댄다. 어긋나면 다음 발화의 onDone이 버려지고 포커스가 다음 say/stop까지 남을 수 있다 → 실측 로그로 이벤트 수를 확인하거나 begin()마다 상한으로 초기화.
+- 전체 삭제 대기(`joinAll`) 중에 새로 시작된 DB 작업은 기다리지 않는다(범위 좁음).
+- 기어 리스너 등록은 성공했는데 이벤트 없이 onFailed만 오는 차량은 대체 판정이 켜지지 않는다.
+- Gleo 액션 두 개(원문/항목)를 하나로 합쳐 "항목별로" 없이도 items가 오는지 시험(§8-4 제안).
+- 슬롭 정리 미반영: `GearSource.supported` 읽는 곳 없음, `DEBUG_ACTIVE` 매직넘버, 상수 동어반복 테스트.
