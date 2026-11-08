@@ -29,6 +29,24 @@ android {
         buildConfigField("String", "GEMINI_API_KEY", localProp("llm.geminiKey", "GEMINI_API_KEY"))
     }
 
+    // local.properties 에 release.* 가 모두 있으면 그 키스토어로, 없으면 debug 서명(심사용)으로 서명한다. 키스토어·비밀번호는 커밋하지 않는다
+    val releaseStore = localProps.getProperty("release.storeFile")
+    if (releaseStore != null) {
+        signingConfigs.create("release") {
+            storeFile = rootProject.file(releaseStore)
+            storePassword = localProps.getProperty("release.storePassword")
+            keyAlias = localProps.getProperty("release.keyAlias")
+            keyPassword = localProps.getProperty("release.keyPassword")
+        }
+    }
+
+    buildTypes {
+        release {
+            isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName(if (releaseStore != null) "release" else "debug")
+        }
+    }
+
     buildFeatures {
         buildConfig = true
     }
