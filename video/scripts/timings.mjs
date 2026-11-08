@@ -1,4 +1,7 @@
 // flow.log(logcat -v time) + rec_start.txt -> src/timings.json (녹화 시작 기준 초).
+// v1: node timings.mjs [take=../apk/video/take2]           -> 평평한 키(cuts.ts 가 지금 읽는 것)
+// v2: node timings.mjs <day1 take> <day2 take>              -> 평평한 키(1일차 기준, 호환용) + d1·d2 (video-script.md "편집 쪽에 넘길 것")
+//     take 하나만 주고 그 안에 day1/·day2/ 가 있으면(tools/run-demo.sh v2 의 apk/video/v2) 그것을 쓴다.
 // 로그가 없으면 대본의 1차 녹화 기준값을 쓴다.
 import {existsSync, readFileSync, writeFileSync} from 'node:fs';
 import {spawnSync} from 'node:child_process';
@@ -6,7 +9,9 @@ import {dirname, join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const take = process.argv[2] ?? join(root, '../apk/video/take2');
+let [take, take2] = process.argv.slice(2);
+take ??= join(root, '../apk/video/take2');
+if (!take2 && existsSync(join(take, 'day1/flow.log'))) [take, take2] = [join(take, 'day1'), join(take, 'day2')];
 const out = join(root, 'src/timings.json');
 const footage = join(root, 'public/footage.mp4');
 const SPEED = 30; // tools/run-demo.sh 기본 배속
@@ -37,7 +42,7 @@ const probeDuration = () => {
   return Number.isFinite(d) ? d : null;
 };
 
-// 카드 전환(S0 -> S1)은 화면이 크게 바뀌는 첫 프레임이라 rec_start(초 단위, 최대 1초 오차)를 보정하는 기준으로 쓴다.
+// 카드 전환(S0 -> S1)은 화면이 크게 바뀌는 첫 프레임이라 rec_start(최대 1초 오차)를 보정하는 기준으로 쓴다.
 const sceneChange = (from, to) => {
   if (!existsSync(footage)) return null;
   const r = spawnSync('ffmpeg', ['-hide_banner', '-ss', String(from), '-t', String(to - from), '-i', footage,
@@ -46,59 +51,137 @@ const sceneChange = (from, to) => {
   return m ? from + parseFloat(m[1]) : null;
 };
 
-const flowPath = join(take, 'flow.log');
-const startPath = join(take, 'rec_start.txt');
-let t = {...defaults};
-
-if (existsSync(flowPath) && existsSync(startPath)) {
-  const rec0 = toSec(readFileSync(startPath, 'utf8').trim());
+/** take 의 PleoryFlow·PleoryDemo 줄을 녹화 시작 기준 초로. 없으면 null. */
+const readEvents = (dir) => {
+  const flowPath = join(dir, 'flow.log');
+  const startPath = join(dir, 'rec_start.txt');
+  if (!existsSync(flowPath) || !existsSync(startPath)) return null;
+  const recStart = readFileSync(startPath, 'utf8').trim();
+  const rec0 = toSec(recStart);
   const ev = [];
   for (const line of readFileSync(flowPath, 'utf8').split('\n')) {
-    const m = /^\d\d-\d\d (\d\d:\d\d:\d\d\.\d+) I\/PleoryFlow\(\s*\d+\): (.*)$/.exec(line);
-    if (m) ev.push({t: toSec(m[1]) - rec0, msg: m[2]});
+    const m = /^\d\d-\d\d (\d\d:\d\d:\d\d\.\d+) [IWE]\/(PleoryFlow|PleoryDemo)\(\s*\d+\): (.*)$/.exec(line);
+    if (m) ev.push({t: toSec(m[1]) - rec0, msg: m[3]});
   }
   const find = (re, after = -Infinity) => ev.find((e) => e.t > after && re.test(e.msg))?.t ?? null;
+  const findLast = (re, before = Infinity) => ev.filter((e) => e.t < before && re.test(e.msg)).at(-1)?.t ?? null;
+  const xy = (name) => {
+    const e = ev.find((x) => new RegExp(`^tap ${name} x=`).test(x.msg));
+    const m = e && /x=(\d+) y=(\d+)/.exec(e.msg);
+    return m ? {x: Number(m[1]), y: Number(m[2])} : null;
+  };
+  return {recStart, ev, find, findLast, xy};
+};
 
+const warnMissing = (label, got) => {
+  const missing = Object.entries(got).filter(([, v]) => v == null).map(([k]) => k);
+  if (missing.length) console.warn(`timings ${label}: 로그에 없음: ${missing.join(', ')}`);
+};
+
+/** v1 take(한마디 2) 또는 v2 1일차(한마디 3): 한마디·카드·요약 키. */
+const parseDrive = ({find}, utterances = 2) => {
   const tap1 = find(/^event TalkTapped/);
   const ack1 = find(/^command Say\(text=적어뒀어\)/, tap1 ?? -Infinity);
   const ack1Done = find(/^tts onDone/, ack1 ?? -Infinity);
   const tap2 = find(/^event TalkTapped/, tap1 ?? -Infinity);
   const ack2 = find(/^command Say\(text=적어뒀어\)/, tap2 ?? -Infinity);
   const ack2Done = find(/^tts onDone/, ack2 ?? -Infinity);
-  const gearP = find(/^event GearChanged\(gear=P\)/, tap2 ?? -Infinity);
-  const cardShown = find(/^output showCard/, tap2 ?? -Infinity);
+  const tap3 = utterances < 3 ? null : find(/^event TalkTapped/, tap2 ?? -Infinity);
+  const ack3 = tap3 == null ? null : find(/^command Say\(text=적어뒀어\)/, tap3);
+  const ack3Done = ack3 == null ? null : find(/^tts onDone/, ack3);
+  const last = tap3 ?? tap2 ?? -Infinity;
+  const gearP = find(/^event GearChanged\(gear=P\)/, last);
+  const cardShown = find(/^output showCard/, last);
   const summaryStart = find(/^summary speak/, cardShown ?? -Infinity);
   const summaryEnd = find(/^event SummaryDone/, summaryStart ?? -Infinity);
-  const deleteTap = find(/delete|Delete/, summaryEnd ?? -Infinity);
+  return {tap1, ack1, ack1Done, tap2, ack2, ack2Done, tap3, ack3, ack3Done, gearP, cardShown, summaryStart, summaryEnd};
+};
 
-  const got = {tap1, ack1, ack1Done, tap2, ack2, ack2Done, gearP, cardShown, summaryStart, summaryEnd};
-  const missing = Object.entries(got).filter(([, v]) => v == null).map(([k]) => k);
-  if (missing.length) console.warn(`timings: 로그에 없음 -> 기본값 사용: ${missing.join(', ')}`);
-  for (const [k, v] of Object.entries(got)) if (v != null) t[k] = v;
-  t.deleteTap = deleteTap;
-  t.source = `flow.log (rec_start ${readFileSync(startPath, 'utf8').trim()})`;
-  // 앱 시계: 첫 한마디가 18:57 (run-demo 시나리오). clock0 = 18:40 에 해당하는 녹화 초.
-  t.clock0 = t.tap1 - (17 * 60) / SPEED;
+const parseDay1 = (L) => {
+  const drive = parseDrive(L, 3);
+  const qrOpen = L.find(/^qr open /);
+  const t = {
+    clock0: L.find(/^demo start day=1/),
+    consentTap: L.find(/^tap consent x=/),
+    ...drive,
+    deleteTap: L.find(/^tap delete x=/),
+    deleteConfirmTap: L.find(/^tap delete-confirm x=/),
+    qrTap: L.find(/^tap qr x=/),
+    qrOpen,
+    qrClose: L.find(/^qr close/, qrOpen ?? -Infinity),
+    historyTap: L.find(/^tap history x=/),
+    todoOnlyTap: L.find(/^tap todo-only x=/),
+  };
+  warnMissing('d1', t);
+  t.tapXY = Object.fromEntries(['consent', 'delete', 'delete-confirm', 'qr', 'qr-close', 'history', 'todo-only'].map((n) => [n, L.xy(n)]));
+  return t;
+};
+
+const parseDay2 = (L) => {
+  const gleoAccepted = L.find(/^gleo ADD_DRIVE_NOTES? accepted/);
+  const t = {
+    clock0: L.find(/^demo start day=2/),
+    gleoInject: L.findLast(/^gleo (inject A|simulated)/, gleoAccepted ?? Infinity),
+    gleoAccepted,
+    gleoResponse: L.find(/^gleo response sent fn=/, gleoAccepted ?? -Infinity),
+    gearP: L.find(/^event GearChanged\(gear=P\)/, gleoAccepted ?? -Infinity),
+    cardShown: L.find(/^output showCard/, gleoAccepted ?? -Infinity),
+  };
+  t.remindStart = L.find(/^summary speak/, t.cardShown ?? -Infinity);
+  t.summaryEnd = L.find(/^event SummaryDone/, t.remindStart ?? -Infinity);
+  t.remindDoneTap = L.find(/^tap remind-done x=/);
+  warnMissing('d2', t);
+  // B(직접 intent)면 컷 26 에 Gleo 대답 소리가 없다 — 편집이 "Gleo 호출 시뮬레이션" 표시를 넣는다
+  t.gleoSimulated = L.ev.some((e) => /^gleo simulated/.test(e.msg));
+  t.tapXY = {'remind-done': L.xy('remind-done')};
+  t.source = `flow.log (rec_start ${L.recStart})`;
+  return t;
+};
+
+const shiftAll = (obj, shift) => {
+  for (const [k, v] of Object.entries(obj)) if (typeof v === 'number' && k !== 'clockSpeed' && k !== 'syncShift' && k !== 'footageDuration') obj[k] = v + shift;
+};
+
+let t = {...defaults};
+const L1 = readEvents(take);
+if (L1) {
+  const v2 = take2 != null;
+  const d1 = v2 ? parseDay1(L1) : null;
+  const drive = d1 ?? parseDrive(L1);
+  for (const k of Object.keys(defaults)) if (drive[k] != null) t[k] = drive[k];
+  t.deleteTap = drive.deleteTap ?? L1.find(/delete|Delete/, drive.summaryEnd ?? -Infinity);
+  t.source = `flow.log (rec_start ${L1.recStart})`;
+  // 앱 시계: v2 는 `demo start` 줄, v1 은 첫 한마디가 18:57 인 것으로 거꾸로 셈. clock0 = 18:40 에 해당하는 녹화 초.
+  t.clock0 = d1?.clock0 ?? t.tap1 - (17 * 60) / SPEED;
+  if (!v2) warnMissing('v1', parseDrive(L1));
 
   // 화면 보정: 로그의 showCard 와 실제 카드 전환 프레임의 차이를 녹화 시작 오차로 본다.
   const scene = sceneChange(Math.max(0, t.cardShown - 2), t.cardShown + 1);
   if (scene != null) {
     const shift = Math.max(-1.2, Math.min(1.2, scene - t.cardShown));
     t.syncShift = Number(shift.toFixed(3));
-    for (const k of ['clock0', 'tap1', 'ack1', 'ack1Done', 'tap2', 'ack2', 'ack2Done', 'gearP', 'cardShown', 'summaryStart', 'summaryEnd', 'deleteTap']) {
-      if (t[k] != null) t[k] += shift;
-    }
+    shiftAll(t, shift);
+    if (d1) shiftAll(d1, shift);
     console.log(`timings: 카드 전환 프레임 ${scene.toFixed(2)}s, 보정 ${shift.toFixed(2)}s`);
   } else {
     console.warn('timings: 카드 전환 프레임을 못 찾음 -> 보정 없음');
   }
+  if (d1) {
+    t.d1 = d1;
+    const L2 = readEvents(take2);
+    if (L2) t.d2 = parseDay2(L2); // 2일차 녹화는 아직 footage 로 바꾸지 않으므로 화면 보정 없이 로그 시각 그대로
+    else console.warn(`timings: ${take2} 의 flow.log·rec_start.txt 없음 -> d2 없음`);
+  }
 } else {
-  console.warn(`timings: ${flowPath} 또는 rec_start.txt 없음 -> 대본 기본값`);
+  console.warn(`timings: ${take} 의 flow.log 또는 rec_start.txt 없음 -> 대본 기본값`);
 }
 
 const dur = probeDuration();
 if (dur != null) t.footageDuration = dur;
-for (const [k, v] of Object.entries(t)) if (typeof v === 'number') t[k] = Number(v.toFixed(3));
+const round = (o) => { for (const [k, v] of Object.entries(o)) if (typeof v === 'number') o[k] = Number(v.toFixed(3)); };
+round(t);
+if (t.d1) round(t.d1);
+if (t.d2) round(t.d2);
 writeFileSync(out, JSON.stringify(t, null, 2) + '\n');
 console.log(`wrote ${out}`);
 console.log(JSON.stringify(t));
