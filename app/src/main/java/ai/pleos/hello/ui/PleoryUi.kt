@@ -44,6 +44,7 @@ internal object Tok {
     val UP = Color.parseColor("#56BDD6")         // 8.4:1
 
     // 글자 (sp, 줄 높이 dp)
+    val HEAD_M = 56f to 72      // S0 말하기(주행 중 유일한 글자 조작)
     val HEAD_S = 48f to 64
     val TITLE_L = 40f to 52
     val BODY_L = 30f to 38

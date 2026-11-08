@@ -10,14 +10,14 @@ class LayoutModeTest {
         assertEquals(LayoutMode.NARROW, LayoutMode.from(1199))
     }
     @Test fun `분할 창 841dp 는 NARROW`() = assertEquals(LayoutMode.NARROW, LayoutMode.from(841))
-    @Test fun `S0 버튼 폭은 40퍼센트이고 440dp 를 넘지 않는다`() {
-        assertEquals(440, LayoutMode.s0ButtonWidthDp(1682))
-        assertEquals(336, LayoutMode.s0ButtonWidthDp(840))
-        assertEquals(440, LayoutMode.s0ButtonWidthDp(1100))
+    @Test fun `S0 버튼은 창 폭 전체 띠 - 양옆 여백 48dp`() {
+        assertEquals(1586, LayoutMode.s0ButtonWidthDp(1682))
+        assertEquals(744, LayoutMode.s0ButtonWidthDp(840))
     }
-    @Test fun `S0 버튼 높이는 80에서 176 사이`() {
-        assertEquals(175, LayoutMode.s0ButtonHeightDp(1210))
-        assertEquals(176, LayoutMode.s0ButtonHeightDp(2000))
-        assertEquals(80, LayoutMode.s0ButtonHeightDp(300))
+    @Test fun `S0 버튼 높이는 창 높이의 3분의 1 - 120에서 400 사이`() {
+        assertEquals(400, LayoutMode.s0ButtonHeightDp(1210)) // 403 → 상한
+        assertEquals(300, LayoutMode.s0ButtonHeightDp(900))
+        assertEquals(400, LayoutMode.s0ButtonHeightDp(2000))
+        assertEquals(120, LayoutMode.s0ButtonHeightDp(300))
     }
 }
