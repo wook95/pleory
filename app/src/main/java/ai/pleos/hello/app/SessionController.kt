@@ -31,6 +31,7 @@ import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
@@ -73,6 +74,8 @@ class SessionController(
     private val trace: (String) -> Unit = {},
     /** 컨트롤러 코루틴의 처리되지 않은 예외 로그 훅(앱이 죽지 않게 삼키고 남긴다). */
     private val logError: (String, Throwable) -> Unit = { _, _ -> },
+    /** 기어 P·제한 없음인가(ScreenGate). 리마인드는 이게 열려 있을 때만 말한다. */
+    private val gateAllowed: () -> Boolean = { true },
 ) {
     private class Entry(val text: String, val dbId: CompletableDeferred<Long>) {
         var generation = 0
@@ -124,6 +127,9 @@ class SessionController(
     var summaryText: String? = null
         private set
     private var summaryHeld = false
+
+    /** 막혀 있는 동안 시작하지 못한 요약. 막힘이 풀리고 카드 상태면 한 번 읽는다. */
+    private var summaryOwed = false
 
     /** 이벤트 처리 직후 현재 상태를 알린다(UI 갱신용). 직렬 경로에서 불린다. */
     var onStateChanged: ((SessionState) -> Unit)? = null
@@ -224,13 +230,20 @@ class SessionController(
         }
     }
 
-    /** 동의 화면이 카드를 가리는 동안 요약을 막는다. 재생 중이거나 시작 대기 중이면 끝낸다. 풀린 뒤 재생은 화면이 [replaySummary] 로 한다. */
+    /**
+     * 지금 세션 카드가 안 보이는 동안(동의·설정·지난 기록) 요약을 막는다. 이미 읽는 중이면 멈추고(건너뛰기와 같다),
+     * 시작 전이면 미뤄 두었다가 막힘이 풀릴 때 카드 상태면 한 번 읽는다. 리마인드도 그때 같이 말하고 그때 표시한다.
+     */
     fun holdSummary(hold: Boolean) {
         scope.launch {
             summaryHeld = hold
             if (hold && summaryJob != null) {
                 trace("summary held")
+                if (summaryText == null) summaryOwed = true
                 endSummary(stopSpeech = true, notifyDone = true)
+            } else if (!hold && summaryOwed) {
+                summaryOwed = false
+                if (machine.state == SessionState.CARD && summaryText == null) playSummary()
             }
         }
     }
@@ -249,6 +262,7 @@ class SessionController(
     fun deleteAllData(onDone: () -> Unit = {}) {
         scope.launch {
             entries.clear()
+            reminderJob?.cancelAndJoin() // 조회 중인 리마인드가 지운 뒤에 띠를 되살리지 않게
             reminders = emptyList()
             reminderUnspoken = false
             dbJobs.toList().joinAll()
@@ -391,6 +405,7 @@ class SessionController(
             is SessionCommand.CommitRaw -> commit(c.utteranceId, LlmStatus.FAILED)
             is SessionCommand.KeepPending -> Unit // PENDING 은 저장 시점의 값이 그대로 유지된다
             SessionCommand.ShowS0 -> {
+                summaryOwed = false
                 endSummary(stopSpeech = true, notifyDone = false)
                 outputs.showS0()
             }
@@ -404,7 +419,8 @@ class SessionController(
                 cardJob = launchDb {
                     store.finishSession(session.await(), endedAt, end, SessionEndCalc.downsample(info.points))
                 }
-                if (reminderJob == null) findReminders(session, endedAt)
+                // 리마인드는 목적지 도착으로 뜬 카드에서만 고른다(목적지 없음 + P 5초 대체 판정은 제외)
+                if (reminderJob == null && machine.cardByArrival) findReminders(session, endedAt)
                 outputs.showCard()
             }
             SessionCommand.StartSummary -> {
@@ -422,6 +438,7 @@ class SessionController(
                 reminderJob = null
                 reminders = emptyList()
                 reminderUnspoken = false
+                summaryOwed = false
                 val startedAt = clock.nowMillis()
                 sessionStartedAt = startedAt
                 context.onSessionStart()
@@ -480,12 +497,15 @@ class SessionController(
                 store.setSummaryText(sid, text)
                 if (seq != summarySeq) return@launch
                 if (summaryHeld) {
+                    trace("summary owed")
+                    summaryOwed = true
                     endSummary(stopSpeech = false, notifyDone = true)
                     return@launch
                 }
-                // 리마인드는 요약 앞에 붙여 한 번에 읽는다(겹치지 않게). 카드 상태 = 기어 P 일 때만 말한다
+                // 리마인드는 요약 앞에 붙여 한 번에 읽는다(겹치지 않게). 카드 상태이고 게이트(기어 P·제한 없음)가 열렸을 때만 말한다
                 val now = clock.nowMillis()
-                val remind = if (reminderUnspoken) ArrivalReminder.line(reminders, now, parked = machine.state == SessionState.CARD) else null
+                val parked = machine.state == SessionState.CARD && gateAllowed()
+                val remind = if (reminderUnspoken) ArrivalReminder.line(reminders, now, parked) else null
                 val spoken = if (remind != null) "$remind $text" else text
                 if (remind != null) {
                     reminderUnspoken = false

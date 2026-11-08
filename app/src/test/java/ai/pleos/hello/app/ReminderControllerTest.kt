@@ -1,6 +1,7 @@
 package ai.pleos.hello.app
 
 import ai.pleos.hello.core.Clock
+import ai.pleos.hello.core.DestinationState
 import ai.pleos.hello.core.Gear
 import ai.pleos.hello.core.ReminderCandidate
 import ai.pleos.hello.core.RuleStructurer
@@ -105,10 +106,10 @@ class ReminderControllerTest {
         TimeZone.setDefault(defaultTz)
     }
 
-    private fun controller() = SessionController(
+    private fun controller(gate: () -> Boolean = { true }) = SessionController(
         store, RuleStructurer(), NoIn(), out, Quiet, HomeContext,
         object : Clock { override fun nowMillis() = NOW },
-        executor.asCoroutineDispatcher(), trace = { traces += it },
+        executor.asCoroutineDispatcher(), trace = { traces += it }, gateAllowed = gate,
     )
 
     private fun todo(id: Long, session: Long = 7, text: String = "거래처 서류 다시 보내기", at: Long = NOW - DAY) =
@@ -204,5 +205,62 @@ class ReminderControllerTest {
         awaitUntil { store.doneIds.isNotEmpty() }
         assertEquals(listOf(2L), runBlocking { c.loadReminders() }.map { it.itemId })
         assertEquals(listOf(1L), store.doneIds.toList())
+    }
+
+    @Test fun parkFallbackCard_noDestination_noReminder() {
+        store.candidates += todo(1)
+        val c = controller()
+        c.post(SessionEvent.DestinationChanged(DestinationState.None))
+        c.post(SessionEvent.IgnitionOn)
+        c.post(SessionEvent.GearChanged(Gear.D))
+        c.post(SessionEvent.GearChanged(Gear.P))
+        c.post(SessionEvent.ParkHeld5s) // D9 대체 판정: 목적지 없음 + P 5초
+        awaitUntil { out.said.isNotEmpty() }
+        assertEquals(SessionState.CARD, c.state)
+        assertEquals("오늘은 말이 없었네. 그래도 여기까지 왔어.", out.said.single())
+        assertTrue(store.remindedCalls.isEmpty())
+        assertTrue(runBlocking { c.loadReminders() }.isEmpty())
+    }
+
+    @Test fun gateClosedInCard_noReminderSpoken_notMarked() {
+        store.candidates += todo(1)
+        val c = controller(gate = { false })
+        arrive(c)
+        awaitUntil { out.said.isNotEmpty() }
+        assertEquals(SessionState.CARD, c.state)
+        assertEquals("오늘은 말이 없었네. 그래도 여기까지 왔어.", out.said.single())
+        Thread.sleep(200)
+        assertTrue(store.remindedCalls.isEmpty())
+    }
+
+    @Test fun cardHidden_summaryAndReminderHeld_thenSpokenOnceOnReturn() {
+        store.candidates += todo(1)
+        val c = controller()
+        c.holdSummary(true) // 지난 기록·설정이 카드를 가린 채 도착(늦은 커밋으로 요약이 시작되는 경우와 같다)
+        arrive(c)
+        awaitUntil { traces.contains("summary owed") }
+        Thread.sleep(200)
+        assertTrue("카드가 안 보이면 말하지 않는다", out.said.isEmpty())
+        assertTrue(store.remindedCalls.isEmpty())
+        assertEquals(null, c.summaryText)
+
+        c.holdSummary(false) // 카드로 돌아옴
+        awaitUntil { out.said.isNotEmpty() }
+        assertTrue(out.said.single().startsWith("어제 퇴근길에 할 일 하나 말했어."))
+        awaitUntil { store.remindedCalls.size == 1 }
+        c.holdSummary(false) // 다시 그려도 한 번만
+        Thread.sleep(200)
+        assertEquals(1, out.said.size)
+    }
+
+    @Test fun holdWhileSpeaking_stops_andDoesNotReplayOnReturn() {
+        val c = controller()
+        arrive(c)
+        awaitUntil { c.summaryText != null }
+        c.holdSummary(true)
+        awaitUntil { c.summaryText == null }
+        c.holdSummary(false)
+        Thread.sleep(200)
+        assertEquals(1, out.said.size)
     }
 }

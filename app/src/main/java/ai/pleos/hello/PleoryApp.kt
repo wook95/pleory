@@ -141,6 +141,7 @@ class PleoryApp : Application() {
             dispatcher = sdkHub.handler.asCoroutineDispatcher(), // SdkHub 직렬 경로(메인 루퍼)와 같은 스레드
             trace = { Log.i(FLOW_TAG, it) },
             logError = { msg, t -> Log.e(FLOW_TAG, msg, t) },
+            gateAllowed = ::gateAllowed,
         )
         sdkHub.uxRestrictions.addListener { required ->
             Log.i(FLOW_TAG, "ux required=$required active=${sdkHub.uxRestrictions.activeRestrictions} gate=${gateAllowed()}")

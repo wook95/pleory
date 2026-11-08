@@ -94,4 +94,12 @@ class CardTriggerTest {
         t.onGear(Gear.P)
         assertFalse(t.fired())
     }
+
+    @Test fun 도착_종류_내비도착과_근접은_도착_P5초_대체판정은_아님() {
+        assertTrue(trigger(DestinationState.Known).apply { onArrived() }.firedByArrival())
+        assertTrue(trigger(DestinationState.Known).apply { onLocationNearDest() }.firedByArrival())
+        val fallback = trigger(DestinationState.None).apply { onParkHeld5s() }
+        assertTrue(fallback.fired())
+        assertFalse(fallback.firedByArrival())
+    }
 }
