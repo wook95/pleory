@@ -2,127 +2,89 @@ package ai.pleos.hello.ui
 
 import ai.pleos.hello.core.LayoutMode
 import android.content.Context
-import android.graphics.Canvas
-import android.graphics.Color
-import android.graphics.Paint
-import android.graphics.RectF
-import android.graphics.Typeface
-import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
-import android.view.View
 import android.widget.FrameLayout
 import android.widget.LinearLayout
-import android.widget.TextView
 
 /**
- * S0 주행 화면(PRD §5, 시안 r1 S0-B). 실시간 데이터 바인딩 없음 — 상태 텍스트는 세션 시작 때 정해진 구간 이름이고
- * 버튼만 두 상태(기본/듣는 중). 바깥 여백 40dp. 말하기 버튼은 창 크기에 비례한다([LayoutMode]).
+ * S0 주행 화면(PRD §5, 시안 r2 A). 실시간 데이터 바인딩 없음 — 제목은 세션 시작 때 정해진 구간 이름이고
+ * 버튼만 두 상태다. 기본은 낮은 면 + 테두리(차분), 듣는 중은 밝은 잉크로 채워 가장 눈에 띄게 한다.
+ * 주행 중이므로 아무것도 움직이지 않는다(눌림 축소 없음, 색·문구만 바뀜). 말하기 버튼 크기는 [LayoutMode] 를 따른다.
  */
 class S0DriveView(context: Context, private val onTalk: () -> Unit, onSettings: () -> Unit = {}) : FrameLayout(context) {
 
+    private val segment = context.txt(Tok.TITLE_L, Tok.FG, 700, s = "기록 중")
     private val button = LinearLayout(context)
     private val glyph = MicGlyph(context)
-    private val label = TextView(context)
-    private val settings = TextView(context)
-    private val status = TextView(context)
+    private val label = context.txt(Tok.TITLE_L, Tok.FG, 700)
+    private val hint = context.txt(Tok.LABEL_M, Tok.ON_PRIMARY, s = "한 번 더 누르면 취소")
+    private val settings = context.button("설정", BtnKind.TEXT, padH = 28, scale = false) { onSettings() }
+    private var listening: Boolean? = null
+    private var shortButton = false
 
     init {
-        setBackgroundColor(BG)
-        addView(
-            LinearLayout(context).apply {
-                gravity = Gravity.CENTER_VERTICAL
-                addView(View(context).apply { background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(ACCENT) } }, LinearLayout.LayoutParams(dp(14), dp(14)).apply { rightMargin = dp(16) })
-                addView(status.apply {
-                    text = "기록 중"
-                    textSize = 40f
-                    setTextColor(FG)
-                    typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-                })
-            },
-            LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.START).apply { setMargins(dp(EDGE), dp(EDGE), 0, 0) },
-        )
+        setBackgroundColor(Tok.BG)
+        val e = context.dp(Tok.EDGE)
+        addView(context.col().apply {
+            addView(segment)
+            addView(context.txt(Tok.BODY_M, Tok.SUB, s = "기록하고 있어요"), lp().m(t = context.dp(10)))
+        }, LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.START).apply { setMargins(e, e, 0, 0) })
+
         button.apply {
-            gravity = Gravity.CENTER
-            addView(glyph, LinearLayout.LayoutParams(dp(64), dp(64)))
-            label.apply {
-                textSize = 40f
-                typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-            }
-            addView(label, LinearLayout.LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT).apply { leftMargin = dp(20) })
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            addView(glyph)
+            addView(context.col().apply {
+                addView(label)
+                addView(hint, lp().m(t = context.dp(8)))
+            }, lp(0, LayoutParams.WRAP_CONTENT, 1f))
             setOnClickListener { onTalk() }
         }
-        addView(button, LayoutParams(dp(440), dp(176), Gravity.BOTTOM or Gravity.START).apply { setMargins(dp(EDGE), 0, 0, dp(EDGE)) })
-        settings.apply {
-            text = "설정"
-            textSize = 26f
-            setTextColor(FG)
-            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-            gravity = Gravity.CENTER
-            minHeight = dp(80)
-            minWidth = dp(160)
-            background = GradientDrawable().apply { cornerRadius = dp(16).toFloat(); setColor(Color.parseColor("#1D2A42")) }
-            visibility = GONE
-            setOnClickListener { onSettings() }
-        }
-        addView(settings, LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.END).apply { setMargins(0, dp(EDGE), dp(EDGE), 0) })
+        addView(button, LayoutParams(context.dp(440), context.dp(176), Gravity.BOTTOM or Gravity.START).apply { setMargins(e, 0, 0, e) })
+        settings.visibility = GONE
+        addView(settings, LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.END).apply { setMargins(0, e - context.dp(16), e - context.dp(12), 0) })
         setListening(false)
     }
 
     /** 세션 시작 때 정해진 구간 이름(출근길·퇴근길·외출). 주행 중 값이 바뀌지 않는다. */
     fun setSegmentName(name: String) {
-        status.text = "$name · 기록 중"
+        segment.text = name
     }
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         val d = resources.displayMetrics.density
         val wDp = (MeasureSpec.getSize(widthMeasureSpec) / d).toInt()
         val hDp = (MeasureSpec.getSize(heightMeasureSpec) / d).toInt()
-        button.layoutParams.width = dp(LayoutMode.s0ButtonWidthDp(wDp))
-        button.layoutParams.height = dp(LayoutMode.s0ButtonHeightDp(hDp))
+        val bw = LayoutMode.s0ButtonWidthDp(wDp)
+        button.layoutParams.width = context.dp(bw)
+        val bh = LayoutMode.s0ButtonHeightDp(hDp)
+        button.layoutParams.height = context.dp(bh)
+        shortButton = bh < 110 // 낮은 창에서는 "한 번 더 누르면 취소" 가 잘리므로 뺀다
+        hint.visibility = if (listening == true && !shortButton) VISIBLE else GONE
+        // 좁은 창(버튼 336dp)에서는 "듣고 있어요"가 한 줄에 들어가도록 안쪽 여백과 아이콘을 줄인다
+        val compact = bw < 400
+        button.setPadding(context.dp(if (compact) 28 else 44), 0, context.dp(if (compact) 24 else 40), 0)
+        val g = context.dp(if (compact) 48 else 56)
+        glyph.layoutParams = LinearLayout.LayoutParams(g, g).apply { rightMargin = context.dp(if (compact) 16 else 24) }
         super.onMeasure(widthMeasureSpec, heightMeasureSpec)
     }
 
-    /** 설정 진입 링크. 주차(P)·제한 없음일 때만 보인다(TRD §8-1 5번). */
+    /** 설정 진입. 주차(P)·제한 없음일 때만 보인다(TRD §8-1 5번). */
     fun setSettingsVisible(visible: Boolean) {
         settings.visibility = if (visible) VISIBLE else GONE
     }
 
     fun setListening(listening: Boolean) {
-        val fg = if (listening) ACCENT else ON_ACCENT
-        button.background = GradientDrawable().apply {
-            cornerRadius = dp(36).toFloat()
-            if (listening) { setColor(Color.parseColor("#0E2F3C")); setStroke(dp(8), ACCENT) } else setColor(ACCENT)
-        }
-        glyph.color = fg
-        label.setTextColor(fg)
-        label.text = if (listening) "듣는 중" else "말하기"
+        if (this.listening == listening) return
+        this.listening = listening
+        val ink = if (listening) Tok.ON_PRIMARY else Tok.FG
+        val r = context.dpf(28f)
+        button.background = if (listening) shape(Tok.PRIMARY, r) else shape(Tok.RAISED, r, context.dp(2), Tok.RING)
+        glyph.ink = ink
+        label.setTextColor(ink)
+        label.text = if (listening) "듣고 있어요" else "말하기"
+        hint.visibility = if (listening && !shortButton) VISIBLE else GONE
+        button.contentDescription = if (listening) "듣는 중. 누르면 취소" else "말하기"
     }
 
-    private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
-
-    private class MicGlyph(c: Context) : View(c) {
-        var color = Color.WHITE
-            set(v) { field = v; invalidate() }
-        private val fill = Paint(Paint.ANTI_ALIAS_FLAG)
-        private val stroke = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeCap = Paint.Cap.ROUND }
-
-        override fun onDraw(c: Canvas) {
-            fill.color = color
-            stroke.color = color
-            val w = width.toFloat(); val h = height.toFloat()
-            stroke.strokeWidth = w * 0.09f
-            c.drawRoundRect(RectF(w * 0.34f, h * 0.06f, w * 0.66f, h * 0.60f), w * 0.16f, w * 0.16f, fill)
-            c.drawArc(RectF(w * 0.18f, h * 0.22f, w * 0.82f, h * 0.74f), 0f, 180f, false, stroke)
-            c.drawLine(w * 0.5f, h * 0.74f, w * 0.5f, h * 0.92f, stroke)
-            c.drawLine(w * 0.32f, h * 0.92f, w * 0.68f, h * 0.92f, stroke)
-        }
-    }
-
-    private companion object {
-        const val EDGE = 40
-        val BG = Color.parseColor("#0B1220")
-        val FG = Color.parseColor("#E8ECF2")
-        val ACCENT = Color.parseColor("#00AAD2")
-        val ON_ACCENT = Color.parseColor("#04121A")
-    }
 }

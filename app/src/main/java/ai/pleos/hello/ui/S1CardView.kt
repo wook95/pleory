@@ -3,25 +3,20 @@ package ai.pleos.hello.ui
 import ai.pleos.hello.core.CardFormat
 import ai.pleos.hello.core.CardItem
 import ai.pleos.hello.core.CardModel
+import ai.pleos.hello.core.CardUtterance
 import ai.pleos.hello.core.GeoPoint
 import ai.pleos.hello.core.LayoutMode
 import ai.pleos.hello.core.TrackMath
-import ai.pleos.hello.data.Emotion
+import ai.pleos.hello.data.ItemType
 import android.content.Context
 import android.graphics.Canvas
-import android.graphics.Color
 import android.graphics.CornerPathEffect
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.RectF
-import android.graphics.Typeface
-import android.graphics.drawable.GradientDrawable
-import android.graphics.text.LineBreakConfig
-import android.os.Build
-import android.text.Layout
-import android.text.StaticLayout
-import android.text.TextPaint
-import android.view.Gravity
+import android.text.SpannableStringBuilder
+import android.text.Spanned
+import android.text.style.ForegroundColorSpan
 import android.view.View
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import android.view.ViewGroup.LayoutParams.WRAP_CONTENT
@@ -31,308 +26,243 @@ import android.widget.ScrollView
 import android.widget.TextView
 
 /**
- * S1 카드(PRD §5, 시안 r1 A안 배치). 창이 넓으면([LayoutMode.WIDE]) 좌 경로+핀 40%, 우 패널 60%의 2열,
- * 좁으면(분할·portrait) 위 경로 약 30%, 아래 패널의 1열(B안 순서: 제목·통계 → 감정 흐름 → 항목 → 버튼)이다.
- * 항목 목록만 스크롤한다.
- * 기능 기준 구현이다 — 시각 다듬기는 T8b. [setModel] 로 내용을, [setSummary] 로 요약 자막(재생 중에만)을 바꾼다.
+ * S1 카드(PRD §5, 시안 r2 A "일지"). 상자·칩·통계 타일 없이 글자 크기·굵기·여백·가는 선으로 위계를 만든다.
+ * 창이 넓으면([LayoutMode.WIDE]) 왼쪽 글 58% + 오른쪽 경로 판 42%, 좁으면 한 열(날짜·제목·문장 → 감정 흐름 → 요약 → 항목 → 경로)이고
+ * 아래 버튼 줄과, 재생 중일 때 그 위의 요약 자막 줄은 스크롤 밖에 고정이다(건너뛰기가 화면 밖으로 밀리지 않게). [setModel] 로 내용을, [setSummary] 로 요약 자막(재생 중에만)을 바꾼다. 배치를 바꿔도 내용·자막은 그대로다.
  */
 class S1CardView(
     context: Context,
     private val onReplay: () -> Unit,
     private val onSkip: () -> Unit,
-    private val onEdit: () -> Unit,
     private val onQr: () -> Unit,
     private val onSettings: () -> Unit = {},
 ) : LinearLayout(context) {
 
+    private val page = context.col()
     private val route = RouteView(context)
-    private val dateText = text(DATE_SP, SUB)
-    private val titleText = text(HEADLINE_SP, FG, 700)
-    private val metaText = text(BODY_S_SP, SUB)
-    private val stats = row()
-    private val flow = row().apply { gravity = Gravity.CENTER_VERTICAL }
-    private val itemsBox = col()
-    private val subtitle = text(BODY_S_SP, FG, 500)
-    private val skip = button("건너뛰기", false) { onSkip() }
-    private val routeBox = FrameLayout(context).apply {
-        setBackgroundColor(PANEL)
+    private val routePlate = FrameLayout(context).apply {
+        background = shape(Tok.PLATE, context.dpf(Tok.PLATE_R.toFloat()))
         addView(route, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
     }
-    private val panel = col()
-    private val buttons = row().apply { gravity = Gravity.CENTER_VERTICAL }
-    private val buttonViews = listOf(
-        button("15초 요약 듣기", true) { onReplay() },
-        button("수정", false) { onEdit() },
-        button("폰에서 열기", false) { onQr() },
-        button("설정", false) { onSettings() },
-    )
+    private val subtitle = context.txt(Tok.BODY_L, Tok.FG, 500)
+    private val summaryBlock = context.row().apply {
+        visibility = GONE
+        addView(context.rule().apply { setBackgroundColor(Tok.FG) }, lp(context.dp(3), context.dp(72)).m(r = context.dp(24)))
+        addView(subtitle, lp(0, WRAP_CONTENT, 1f))
+        addView(context.button("건너뛰기", BtnKind.SECONDARY, padH = 28) { onSkip() }, lp(WRAP_CONTENT).m(l = context.dp(24)))
+    }
+    private val primary = context.button("15초 요약 듣기", BtnKind.PRIMARY, PlayGlyph(context, Tok.ON_PRIMARY)) { onReplay() }
+    private val primaryLabel = primary.findViewWithTag<TextView>(BUTTON_LABEL)
+    private val actions = context.row().apply {
+        addView(primary, lp(WRAP_CONTENT))
+        addView(context.button("폰에서 열기", BtnKind.SECONDARY, PhoneGlyph(context, Tok.FG)) { onQr() }, lp(WRAP_CONTENT).m(l = context.dp(16)))
+        addView(View(context), lp(0, 1, 1f))
+        addView(context.button("설정", BtnKind.TEXT, padH = 28) { onSettings() }, lp(WRAP_CONTENT))
+    }
     private var mode: LayoutMode? = null
     private var model: CardModel? = null
-    private val summaryBar = row().apply {
-        gravity = Gravity.CENTER_VERTICAL
-        visibility = GONE
-        background = round(SURFACE, dp(14f))
-        setPadding(dp(28), dp(14), dp(14), dp(14))
-        addView(subtitle, lp(0, WRAP_CONTENT, 1f))
-        addView(skip, lp(WRAP_CONTENT, WRAP_CONTENT).m(l = dp(20)))
-    }
 
     init {
-        setBackgroundColor(BG)
-        addView(routeBox)
-        addView(panel)
-        panel.apply {
-            addView(dateText)
-            addView(titleText, lp().m(t = dp(10)))
-            addView(metaText, lp().m(t = dp(10)))
-            addView(stats, lp())
-            addView(flow, lp())
-            addView(summaryBar, lp().m(t = dp(24)))
-            addView(ScrollView(context).apply {
-                isVerticalScrollBarEnabled = false
-                addView(itemsBox)
-            }, lp(MATCH_PARENT, 0, 1f).m(t = dp(24)))
-            addView(buttons, lp().m(t = dp(24)))
-        }
+        setBackgroundColor(Tok.BG)
         applyMode(LayoutMode.WIDE)
     }
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         super.onSizeChanged(w, h, oldw, oldh)
         val next = LayoutMode.from((w / resources.displayMetrics.density).toInt())
-        if (next != mode) post { applyMode(next) } // 레이아웃 패스 안에서 구조를 바꾸지 않는다
+        // 레이아웃 패스 안에서 구조를 바꾸지 않는다. 실행 시점의 폭으로 다시 판단해 빠른 연속 변경에도 마지막 폭을 따른다
+        if (next != mode) post {
+            val now = LayoutMode.from((width / resources.displayMetrics.density).toInt())
+            if (now != mode) applyMode(now)
+        }
     }
 
-    /** 폭에 따라 배치만 바꾼다. 내용(model)·요약 자막 상태는 그대로 두고 다시 채운다. */
+    /** 폭에 따라 뼈대만 다시 짠다. 글(page)·경로 판·버튼 줄은 같은 뷰를 옮겨 붙이므로 내용과 요약 상태가 남는다. */
     private fun applyMode(next: LayoutMode) {
         mode = next
-        val wide = next == LayoutMode.WIDE
-        orientation = if (wide) HORIZONTAL else VERTICAL
-        routeBox.layoutParams = if (wide) lp(0, MATCH_PARENT, 4f) else lp(MATCH_PARENT, 0, 3f)
-        panel.layoutParams = if (wide) lp(0, MATCH_PARENT, 6f) else lp(MATCH_PARENT, 0, 7f)
-        panel.setPadding(if (wide) dp(56) else dp(EDGE), dp(EDGE), dp(EDGE), dp(EDGE))
-        stats.layoutParams = lp().m(t = if (wide) dp(40) else dp(24))
-        flow.layoutParams = lp().m(t = if (wide) dp(36) else dp(24))
-        buttons.removeAllViews()
-        buttonViews.forEachIndexed { i, b ->
-            b.setPadding(if (wide) dp(36) else dp(24), 0, if (wide) dp(36) else dp(24), 0)
-            buttons.addView(b, lp(WRAP_CONTENT, WRAP_CONTENT).m(l = if (i == 0) 0 else if (wide) dp(14) else dp(10)))
+        removeAllViews()
+        page.detach(); routePlate.detach(); actions.detach(); summaryBlock.detach()
+        val c = context
+        val scroll = ScrollView(c).apply { isVerticalScrollBarEnabled = false }
+        if (next == LayoutMode.WIDE) {
+            orientation = HORIZONTAL
+            scroll.addView(page)
+            addView(c.col().apply {
+                setPadding(c.dp(64), c.dp(56), c.dp(48), c.dp(40))
+                addView(scroll, lp(MATCH_PARENT, 0, 1f))
+                addView(summaryBlock, lp().m(t = c.dp(24)))
+                addView(actions, lp().m(t = c.dp(24)))
+            }, lp(0, MATCH_PARENT, 58f))
+            addView(routePlate, lp(0, MATCH_PARENT, 42f).m(t = c.dp(24), r = c.dp(24), b = c.dp(24)))
+        } else {
+            orientation = VERTICAL
+            scroll.addView(c.col().apply {
+                setPadding(c.dp(40), c.dp(44), c.dp(40), c.dp(32))
+                addView(page)
+                addView(routePlate, lp(MATCH_PARENT, c.dp(380)).m(t = c.dp(36)))
+            })
+            addView(scroll, lp(MATCH_PARENT, 0, 1f))
+            addView(c.rule(), lp(MATCH_PARENT, c.dp(1)))
+            addView(summaryBlock, lp().m(l = c.dp(40), t = c.dp(20), r = c.dp(28)))
+            addView(actions, lp().m(l = c.dp(40), t = c.dp(20), r = c.dp(28), b = c.dp(24)))
         }
-        route.narrow = !wide
-        model?.let(::setModel)
+        route.narrow = next == LayoutMode.NARROW
         requestLayout()
     }
 
     fun setModel(m: CardModel) {
         model = m
-        dateText.text = m.dateLine
-        titleText.text = m.title
-        metaText.text = m.metaLine
-        stats.removeAllViews()
-        listOf(
-            Triple(m.durationMin.toString(), "분", "주행 시간"),
-            Triple(Math.round(m.distanceKm).toString(), "km", "주행 거리"),
-            Triple(m.utterances.size.toString(), "", "한마디"),
-            Triple(m.items.size.toString(), "", "항목"),
-        ).forEachIndexed { i, (v, unit, label) -> stats.addView(stat(v, unit, label), lp(WRAP_CONTENT, WRAP_CONTENT).m(l = if (i == 0) 0 else if (mode == LayoutMode.NARROW) dp(40) else dp(56))) }
-
-        flow.removeAllViews()
-        flow.addView(text(LABEL_S_SP, SUB).apply { text = "감정 흐름" }, lp(WRAP_CONTENT, WRAP_CONTENT).m(r = dp(20)))
-        m.items.forEachIndexed { i, it ->
-            // 색에 더해 ↓ → ↑ 기호를 막대 위에 같이 둔다(색각 접근성)
-            flow.addView(col().apply {
-                gravity = Gravity.CENTER_HORIZONTAL
-                addView(text(LABEL_M_SP, emotionColor(it.emotion), 700).apply { text = CardFormat.emotionGlyph(it.emotion) })
-                addView(View(context).apply { background = round(emotionColor(it.emotion), dp(5f)) }, lp(MATCH_PARENT, dp(10)).m(t = dp(4)))
-            }, lp(0, WRAP_CONTENT, 1f).m(l = if (i == 0) 0 else dp(8)))
+        val c = context
+        page.removeAllViews()
+        page.addView(c.txt(Tok.LABEL_M, Tok.SUB, tnum = true, s = m.date))
+        page.addView(c.txt(Tok.HEAD_S, Tok.FG, 700, s = m.title), lp().m(t = c.dp(12)))
+        page.addView(c.txt(Tok.BODY_L, Tok.SUB, tnum = true, s = m.sentence), lp().m(t = c.dp(16)))
+        if (m.items.isNotEmpty()) page.addView(c.txt(Tok.BODY_M, Tok.FG, 600, s = moodLine(m.items)), lp().m(t = c.dp(32)))
+        if (m.items.isEmpty()) {
+            page.addView(c.rule(), lp(MATCH_PARENT, c.dp(1)).m(t = c.dp(40)))
+            page.addView(c.txt(Tok.BODY_M, Tok.FG, 600, s = "남긴 한마디가 없어요"), lp().m(t = c.dp(32)))
+            page.addView(c.txt(Tok.BODY_S, Tok.SUB, s = "다음에는 운전 중에 말하기 버튼을 누르고 떠오르는 대로 말해 보세요."), lp().m(t = c.dp(8)))
+        } else {
+            page.addView(c.txt(Tok.LABEL_M, Tok.SUB, s = "한마디 ${m.utterances.size}개에서 항목 ${m.items.size}개"), lp().m(t = c.dp(44)))
+            page.addView(c.rule(), lp(MATCH_PARENT, c.dp(1)).m(t = c.dp(14)))
+            m.utterances.forEach { u ->
+                page.addView(entry(u))
+                page.addView(c.rule(), lp(MATCH_PARENT, c.dp(1)))
+            }
         }
-
-        itemsBox.removeAllViews()
-        m.items.forEachIndexed { i, it -> itemsBox.addView(itemRow(it), lp().m(t = if (i == 0) 0 else dp(14))) }
         route.setModel(m)
     }
 
-    /** 요약 재생 중이면 자막과 "건너뛰기" 를 보이고, null 이면 숨긴다(PRD §4-2). */
+    /** 요약 재생 중이면 자막과 "건너뛰기" 를 보이고, null 이면 숨긴다(PRD §4-2). 재생 중에는 주 버튼이 "다시 듣기" 다. */
     fun setSummary(text: String?) {
-        summaryBar.visibility = if (text == null) GONE else VISIBLE
+        summaryBlock.visibility = if (text == null) GONE else VISIBLE
         subtitle.text = text.orEmpty()
+        primaryLabel.text = if (text == null) "15초 요약 듣기" else "다시 듣기"
+        primary.contentDescription = primaryLabel.text
     }
 
-    private fun stat(value: String, unit: String, label: String) = col().apply {
-        addView(row().apply {
-            gravity = Gravity.BOTTOM
-            addView(text(TITLE_L_SP, FG, 700).apply { text = value })
-            if (unit.isNotEmpty()) addView(text(LABEL_M_SP, SUB, 500).apply { text = unit }, lp(WRAP_CONTENT, WRAP_CONTENT).m(l = dp(4), b = dp(3)))
-        })
-        addView(text(LABEL_S_SP, SUB).apply { text = label }, lp().m(t = dp(8)))
+    /** ↓ 가라앉음 — → 그냥 — ↑ 올라옴 : 글리프·낱말·색 세 겹. 항목이 많으면 줄이 넘어간다. */
+    private fun moodLine(items: List<CardItem>) = SpannableStringBuilder().apply {
+        items.forEachIndexed { i, it ->
+            if (i > 0) {
+                val s = length; append("  —  ")
+                setSpan(ForegroundColorSpan(Tok.FAINT), s, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            }
+            val s = length; append("${CardFormat.emotionGlyph(it.emotion)} ${Tok.emotionWord(it.emotion)}")
+            setSpan(ForegroundColorSpan(Tok.emotionColor(it.emotion)), s, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        }
     }
 
-    private fun itemRow(it: CardItem) = row().apply {
-        background = round(SURFACE, dp(14f))
-        minimumHeight = dp(96)
-        setPadding(dp(28), dp(22), dp(28), dp(22))
-        addView(View(context).apply { background = oval(emotionColor(it.emotion)) }, lp(dp(16), dp(16)).m(t = dp(9), r = dp(22)))
-        addView(col().apply {
-            addView(row().apply {
-                gravity = Gravity.CENTER_VERTICAL
-                addView(text(BODY_M_SP, FG, 500).apply { text = it.text }, lp(WRAP_CONTENT, WRAP_CONTENT))
-                addView(text(LABEL_S_SP, TAG_FG, 500).apply {
-                    text = CardFormat.typeTag(it.type)
-                    background = round(CHIP, dp(8f))
-                    setPadding(dp(12), dp(5), dp(12), dp(5))
-                }, lp(WRAP_CONTENT, WRAP_CONTENT).m(l = dp(14)))
-            })
-            addView(text(LABEL_S_SP, SUB).apply { text = it.meta }, lp().m(t = dp(10)))
+    /** 한마디 하나 = 왼쪽 여백에 시각·장소, 오른쪽에 정리된 항목들. 항목이 여럿이면 말한 그대로를 먼저 보인다. */
+    private fun entry(u: CardUtterance) = context.row().apply {
+        val c = context
+        gravity = android.view.Gravity.TOP
+        setPadding(0, c.dp(24), 0, c.dp(20))
+        addView(c.col().apply {
+            addView(c.txt(Tok.BODY_S, Tok.FG, 600, tnum = true, s = u.time))
+            u.place?.let { addView(c.txt(Tok.LABEL_S, Tok.SUB, s = it), lp().m(t = c.dp(6))) }
+            if (u.congested) addView(c.txt(Tok.LABEL_S, Tok.SUB, s = "정체 중"), lp().m(t = c.dp(2)))
+        }, lp(c.dp(132)))
+        addView(c.col().apply {
+            if (u.items.size > 1) addView(c.txt(Tok.LABEL_M, Tok.SUB, s = "“${u.quote}”"), lp().m(b = c.dp(10)))
+            u.items.forEach { addView(itemRow(it)) }
         }, lp(0, WRAP_CONTENT, 1f))
     }
 
-    private fun button(label: String, primary: Boolean, onClick: () -> Unit) =
-        text(BODY_S_SP, if (primary) ON_ACCENT else FG, 700).apply {
-            text = label
-            gravity = Gravity.CENTER
-            minHeight = dp(TOUCH)
-            setPadding(dp(36), 0, dp(36), 0)
-            background = round(if (primary) ACCENT else CHIP, dp(16f))
-            setOnClickListener { onClick() }
+    private fun itemRow(it: CardItem) = context.col().apply {
+        val c = context
+        minimumHeight = c.dp(80)
+        gravity = android.view.Gravity.CENTER_VERTICAL
+        addView(c.txt(Tok.BODY_M, Tok.FG, 500, s = it.text))
+        // 원문(정리 전·실패)은 감정이 정해지지 않았으므로 유형만 쓴다
+        val meta = SpannableStringBuilder(CardFormat.typeTag(it.type))
+        if (it.type != ItemType.RAW) {
+            meta.append("  ·  ")
+            val s = meta.length
+            meta.append("${CardFormat.emotionGlyph(it.emotion)} ${Tok.emotionWord(it.emotion)}")
+            meta.setSpan(ForegroundColorSpan(Tok.emotionColor(it.emotion)), s, meta.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
         }
-
-    private fun text(sp: Float, color: Int, weight: Int = 400) = TextView(context).apply {
-        textSize = sp
-        setTextColor(color)
-        typeface = Typeface.create(Typeface.DEFAULT, weight, false)
-        includeFontPadding = false
-        if (Build.VERSION.SDK_INT >= 33) lineBreakWordStyle = LineBreakConfig.LINE_BREAK_WORD_STYLE_PHRASE // 한글 단어 중간 줄바꿈 방지
+        addView(c.txt(Tok.LABEL_M, Tok.SUB, s = meta), lp().m(t = c.dp(6), b = c.dp(8)))
     }
 
-    private fun col() = LinearLayout(context).apply { orientation = VERTICAL }
-    private fun row() = LinearLayout(context).apply { orientation = HORIZONTAL }
-    private fun lp(w: Int = MATCH_PARENT, h: Int = WRAP_CONTENT, weight: Float = 0f) = LayoutParams(w, h, weight)
-    private fun LayoutParams.m(l: Int = 0, t: Int = 0, r: Int = 0, b: Int = 0) = apply { setMargins(l, t, r, b) }
-    private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
-    private fun dp(v: Float) = v * resources.displayMetrics.density
-
-    private fun round(color: Int, r: Float) = GradientDrawable().apply { cornerRadius = r; setColor(color) }
-    private fun oval(color: Int) = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(color) }
-
     /**
-     * 경로와 핀. 지도 없이 Canvas 로 그리는 도식이다 — 경로 박스를 채우도록 위경도를 각각 정규화하고
-     * 출발이 왼쪽, 도착이 오른쪽에 오도록 좌우를 뒤집는다. 핀은 발화 좌표에서 가장 가까운 경로 점에 놓는다.
+     * 경로와 핀. 지도가 아니라 도식이다 — 위경도를 판 안쪽까지 각각 늘리고, 출발이 왼쪽에 오도록 좌우를 뒤집는다.
+     * 핀은 발화 좌표에서 가장 가까운 경로 점에 놓고, 감정 색(2개 이상이면 대각 반반) + 시각(진행 방향의 법선 쪽)을 붙인다.
+     * 시각이 목록 왼쪽 여백의 시각과 짝이다.
      */
     private class RouteView(c: Context) : View(c) {
         private val d = resources.displayMetrics.density
         private var model: CardModel? = null
         var narrow = false
             set(v) { field = v; invalidate() }
-        private val routeP = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.parseColor("#5B6B84"); strokeWidth = 7 * d; style = Paint.Style.STROKE
-            strokeCap = Paint.Cap.ROUND; strokeJoin = Paint.Join.ROUND; pathEffect = CornerPathEffect(60 * d)
+        private val road = Paint(Paint.ANTI_ALIAS_FLAG).also {
+            it.color = Tok.ROUTE; it.strokeWidth = 6 * d; it.style = Paint.Style.STROKE
+            it.strokeCap = Paint.Cap.ROUND; it.strokeJoin = Paint.Join.ROUND; it.pathEffect = CornerPathEffect(60 * d)
         }
-        private val dot = Paint(Paint.ANTI_ALIAS_FLAG)
-        private val bubbleBg = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#162236") }
-        private val bubbleLine = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.parseColor("#26344D"); style = Paint.Style.STROKE; strokeWidth = 1.5f * d
-        }
-        private val quoteP = TextPaint(Paint.ANTI_ALIAS_FLAG).apply { color = FG; textSize = LABEL_M_SP * d; typeface = Typeface.create(Typeface.DEFAULT, 500, false) }
-        private val metaP = TextPaint(Paint.ANTI_ALIAS_FLAG).apply { color = SUB; textSize = LABEL_S_SP * d }
+        private val fill = Paint(Paint.ANTI_ALIAS_FLAG)
+        private val label = Paint(Paint.ANTI_ALIAS_FLAG).also { it.textSize = 22 * d; it.typeface = face(500); it.fontFeatureSettings = "tnum" }
 
         fun setModel(m: CardModel) {
             model = m
             invalidate()
         }
 
-        private fun layout(s: String, p: TextPaint, w: Int): StaticLayout =
-            StaticLayout.Builder.obtain(s, 0, s.length, p, w)
-                .setAlignment(Layout.Alignment.ALIGN_NORMAL)
-                .setLineSpacing(0f, 1.2f)
-                .apply {
-                    if (Build.VERSION.SDK_INT >= 33) setLineBreakConfig(
-                        LineBreakConfig.Builder().setLineBreakWordStyle(LineBreakConfig.LINE_BREAK_WORD_STYLE_PHRASE).build(),
-                    )
-                }.build()
-
         override fun onDraw(c: Canvas) {
             val m = model ?: return
             if (m.route.size < 2) return
             val w = width.toFloat(); val h = height.toFloat()
+            val inset = if (narrow) 0.10f else 0.14f
             val minLat = m.route.minOf { it.lat }; val maxLat = m.route.maxOf { it.lat }
             val minLng = m.route.minOf { it.lng }; val maxLng = m.route.maxOf { it.lng }
             val flip = m.route.first().lng > m.route.last().lng
             fun xy(p: GeoPoint): Pair<Float, Float> {
                 val nx = if (maxLng > minLng) ((p.lng - minLng) / (maxLng - minLng)).toFloat() else 0.5f
                 val ny = if (maxLat > minLat) ((p.lat - minLat) / (maxLat - minLat)).toFloat() else 0.5f
-                return (MARGIN + (if (flip) 1f - nx else nx) * (1f - 2 * MARGIN)) * w to (MARGIN + (1f - ny) * (1f - 2 * MARGIN)) * h
+                return (inset + (if (flip) 1f - nx else nx) * (1f - 2 * inset)) * w to (inset + (1f - ny) * (1f - 2 * inset)) * h
             }
             val step = (m.route.size / 150).coerceAtLeast(1)
-            val shown = m.route.filterIndexed { i, _ -> i % step == 0 || i == m.route.lastIndex }.map(::xy)
-            c.drawPath(Path().apply {
-                moveTo(shown[0].first, shown[0].second)
-                shown.drop(1).forEach { lineTo(it.first, it.second) }
-            }, routeP)
-            val start = xy(m.route.first()); val end = xy(m.route.last())
-            dot.color = Color.parseColor("#8090A8"); c.drawCircle(start.first, start.second, 10 * d, dot)
-            dot.color = FG; c.drawCircle(end.first, end.second, 12 * d, dot)
+            val idx = m.route.indices.filter { it % step == 0 || it == m.route.lastIndex }
+            val pts = idx.map { xy(m.route[it]) }
+            c.drawPath(Path().apply { moveTo(pts[0].first, pts[0].second); pts.drop(1).forEach { lineTo(it.first, it.second) } }, road)
 
-            val pad = 20 * d
-            m.utterances.forEachIndexed { idx, u ->
-                val at = u.point ?: return@forEachIndexed
-                val (px, py) = xy(m.route.minBy { TrackMath.distanceMeters(it, at) })
-                val r = 15 * d
-                dot.color = BG; c.drawCircle(px, py, r + 6 * d, dot)
-                val colors = CardFormat.pinEmotions(u.items).map(::emotionColor)
-                val oval = RectF(px - r, py - r, px + r, py + r)
-                if (colors.size >= 2) { // 대각 반반
-                    dot.color = colors[0]; c.drawArc(oval, 135f, 180f, true, dot)
-                    dot.color = colors[1]; c.drawArc(oval, -45f, 180f, true, dot)
-                } else {
-                    dot.color = colors.firstOrNull() ?: NEUTRAL; c.drawCircle(px, py, r, dot)
-                }
-                val inner = (minOf(BUBBLE_W * d, w * (if (narrow) 0.5f else 0.62f)) - 2 * pad).toInt()
-                val q = layout("\"${u.quote}\"", quoteP, inner)
-                val meta = layout(CardFormat.pinMeta(u), metaP, inner)
-                val textW = (0 until q.lineCount).maxOf { q.getLineWidth(it) }.coerceAtLeast((0 until meta.lineCount).maxOf { meta.getLineWidth(it) })
-                val bw = textW + 2 * pad
-                val bh = q.height + 8 * d + meta.height + 2 * (pad * 0.8f)
-                val above = idx % 2 == 1
-                val bx = (px - bw * 0.3f).coerceIn(16 * d, w - 16 * d - bw)
-                val by = (if (above) py - r - 18 * d - bh else py + r + 18 * d).coerceIn(16 * d, h - 16 * d - bh)
-                val box = RectF(bx, by, bx + bw, by + bh)
-                c.drawRoundRect(box, 12 * d, 12 * d, bubbleBg)
-                c.drawRoundRect(box, 12 * d, 12 * d, bubbleLine)
-                c.save(); c.translate(bx + pad, by + pad * 0.8f); q.draw(c)
-                c.translate(0f, q.height + 8 * d); meta.draw(c); c.restore()
+            // 출발·도착 — 라벨은 점의 옆(판 안쪽)에 둬서 낮은 판에서도 잘리지 않는다
+            val s = pts.first(); val e = pts.last()
+            fill.color = Tok.PLATE; c.drawCircle(s.first, s.second, 14 * d, fill); c.drawCircle(e.first, e.second, 16 * d, fill)
+            fill.color = Tok.SUB; c.drawCircle(s.first, s.second, 9 * d, fill)
+            fill.color = Tok.FG; c.drawCircle(e.first, e.second, 11 * d, fill)
+            // 점이 판의 왼쪽 반이면 라벨을 오른쪽으로, 오른쪽 반이면 왼쪽으로 낸다(가장자리에서 잘리지 않게)
+            fun side(x: Float, y: Float, text: String, color: Int) {
+                val left = x < w / 2
+                label.textAlign = if (left) Paint.Align.LEFT else Paint.Align.RIGHT; label.color = color
+                c.drawText(text, if (left) x + 28 * d else x - 28 * d, y + 8 * d, label)
             }
-        }
-    }
+            side(s.first, s.second, m.startLabel, Tok.SUB)
+            // 왕복처럼 출발·도착이 겹치면 도착 라벨은 빼고 점만 둔다
+            if (Math.hypot((e.first - s.first).toDouble(), (e.second - s.second).toDouble()) > 120 * d) side(e.first, e.second, m.endLabel, Tok.FG)
 
-    companion object {
-        private const val EDGE = 40
-        private const val TOUCH = 80
-        private const val MARGIN = 0.14f
-        private const val BUBBLE_W = 420
-        private const val HEADLINE_SP = 48f
-        private const val TITLE_L_SP = 40f
-        private const val BODY_M_SP = 28f
-        private const val BODY_S_SP = 26f
-        private const val LABEL_M_SP = 24f
-        private const val DATE_SP = 24f
-        private const val LABEL_S_SP = 20f
-        private val BG = Color.parseColor("#0B1220")
-        private val PANEL = Color.parseColor("#0F1828")
-        private val SURFACE = Color.parseColor("#141F33")
-        private val CHIP = Color.parseColor("#1D2A42")
-        private val FG = Color.parseColor("#E8ECF2")
-        private val SUB = Color.parseColor("#9AA8BC")
-        private val TAG_FG = Color.parseColor("#B7C4D6")
-        private val ACCENT = Color.parseColor("#00AAD2")
-        private val ON_ACCENT = Color.parseColor("#04121A")
-        private val DOWN = Color.parseColor("#E05A6A")
-        private val NEUTRAL = Color.parseColor("#E0A24A")
-        private val UP = Color.parseColor("#00AAD2")
-
-        private fun emotionColor(e: Emotion) = when (e) {
-            Emotion.DOWN -> DOWN
-            Emotion.NEUTRAL -> NEUTRAL
-            Emotion.UP -> UP
+            m.utterances.forEach { u ->
+                val at = u.point ?: return@forEach
+                val near = idx.indices.minBy { TrackMath.distanceMeters(m.route[idx[it]], at) }
+                val (x, y) = pts[near]
+                val r = 16 * d
+                fill.color = Tok.PLATE; c.drawCircle(x, y, r + 5 * d, fill)
+                val moods = CardFormat.pinEmotions(u.items).map(Tok::emotionColor)
+                val o = RectF(x - r, y - r, x + r, y + r)
+                if (moods.size >= 2) {
+                    fill.color = moods[0]; c.drawArc(o, 135f, 180f, true, fill)
+                    fill.color = moods[1]; c.drawArc(o, -45f, 180f, true, fill)
+                } else {
+                    fill.color = moods.firstOrNull() ?: Tok.NEUTRAL; c.drawCircle(x, y, r, fill)
+                }
+                // 진행 방향의 위쪽 법선으로 시각을 민다(선을 가리지 않게)
+                val a = pts[(near - 1).coerceAtLeast(0)]; val b = pts[(near + 1).coerceAtMost(pts.lastIndex)]
+                val len = Math.hypot((b.first - a.first).toDouble(), (b.second - a.second).toDouble()).toFloat().coerceAtLeast(1f)
+                var nx = (b.second - a.second) / len; var ny = -(b.first - a.first) / len
+                if (ny > 0) { nx = -nx; ny = -ny }
+                if (nx == 0f && ny == 0f) ny = -1f // 경로 점이 한 곳에 모이면 위로
+                label.textAlign = if (nx < 0) Paint.Align.RIGHT else Paint.Align.LEFT; label.color = Tok.FG
+                c.drawText(u.time, x + nx * (r + 22 * d), y + ny * (r + 22 * d) + 8 * d, label)
+            }
         }
     }
 }

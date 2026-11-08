@@ -9,7 +9,6 @@ import ai.pleos.hello.data.TrackPoint
 import ai.pleos.hello.data.Utterance
 import java.util.TimeZone
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class CardModelTest {
@@ -41,11 +40,13 @@ class CardModelTest {
     )
 
     @Test
-    fun `제목 날짜 메타 줄`() {
+    fun `제목 날짜 문장 끝점 라벨`() {
         val m = build(twoItems)
         assertEquals("퇴근길 51분", m.title)
-        assertEquals("오늘의 나 · 11월 8일 일요일", m.dateLine)
-        assertEquals("18:40 회사 → 19:31 집 · 비 · 올림픽대로 정체 23분", m.metaLine)
+        assertEquals("11월 8일 일요일", m.date)
+        assertEquals("18:40 회사에서 출발해 23km 달려 19:31 집에 도착했어요.\n비, 올림픽대로 정체 23분.", m.sentence)
+        assertEquals("18:40 회사", m.startLabel)
+        assertEquals("19:31 집", m.endLabel)
     }
 
     @Test
@@ -60,11 +61,11 @@ class CardModelTest {
     }
 
     @Test
-    fun `항목 메타 줄 - 정체 구간 및 분할 시 첫 항목에만 원문`() {
+    fun `발화 줄 - 시각 장소 정체 원문`() {
         val m = build(twoItems)
-        assertEquals("18:57 · 올림픽대로 · 정체 23분 구간", m.items[0].meta)
-        assertEquals("19:08 · 한강대교 · 원문 \"내일 거래처 서류 다시 보내야 해 아 노을 예쁘다\"", m.items[1].meta)
-        assertEquals("19:08 · 한강대교", m.items[2].meta)
+        assertEquals(listOf("올림픽대로", "한강대교"), m.utterances.map { it.place })
+        assertEquals(listOf(true, false), m.utterances.map { it.congested })
+        assertEquals(u2.text, m.utterances[1].quote)
     }
 
     @Test
@@ -79,7 +80,6 @@ class CardModelTest {
     fun `삭제된 항목은 빠지고 수정문이 우선한다`() {
         val m = build(listOf(twoItems[0].copy(editedText = "서류 재전송"), twoItems[1].copy(deleted = true)))
         assertEquals(listOf("서류 재전송"), m.utterances[1].items.map { it.text })
-        assertTrue("1개만 남으면 원문 표시 없음", !m.utterances[1].items[0].meta.contains("원문"))
     }
 
     @Test
@@ -93,17 +93,23 @@ class CardModelTest {
     }
 
     @Test
-    fun `핀 메타`() {
-        val m = build(twoItems)
-        assertEquals("18:57 · 올림픽대로 · 정체", CardFormat.pinMeta(m.utterances[0]))
-        assertEquals("19:08 · 한강대교 · 한마디 1 → 항목 2", CardFormat.pinMeta(m.utterances[1]))
+    fun `정체 0분이면 문장에 정체 없음 - 장소 모르면 시각에 바로 조사 - 구간별 제목`() {
+        val m = CardModelBuilder.build(session.copy(congestionMin = 0, segment = Segment.COMMUTE_IN, destLabel = null), emptyList(), emptyList(), tz)
+        assertEquals("18:40 회사에서 출발해 23km 달려 19:31에 도착했어요.\n비.", m.sentence)
+        val bare = CardModelBuilder.build(session.copy(congestionMin = 0, weather = null, originLabel = null), emptyList(), emptyList(), tz)
+        assertEquals("18:40에 출발해 23km 달려 19:31 집에 도착했어요.", bare.sentence)
+        assertEquals("18:40", bare.startLabel)
+        assertEquals("출근길 51분", m.title)
+        assertEquals("외출 7분", CardFormat.title(Segment.OUTING, 7))
     }
 
     @Test
-    fun `정체 0분이면 메타 줄에 정체 없음 - 구간별 제목`() {
-        val m = CardModelBuilder.build(session.copy(congestionMin = 0, segment = Segment.COMMUTE_IN, destLabel = null), emptyList(), emptyList(), tz)
-        assertEquals("18:40 회사 → 19:31 · 비", m.metaLine)
-        assertEquals("출근길 51분", m.title)
-        assertEquals("외출 7분", CardFormat.title(Segment.OUTING, 7))
+    fun `문장 - 날씨 없이 정체만 - 정체 도로 모름 - 1km 미만은 소수 한 자리`() {
+        val noWeather = CardModelBuilder.build(session.copy(weather = null), emptyList(), emptyList(), tz)
+        assertEquals("18:40 회사에서 출발해 23km 달려 19:31 집에 도착했어요.\n정체 23분.", noWeather.sentence)
+        val short = CardModelBuilder.build(session.copy(distanceKm = 0.42, congestionMin = 0, weather = null), emptyList(), emptyList(), tz)
+        assertEquals("18:40 회사에서 출발해 0.4km 달려 19:31 집에 도착했어요.", short.sentence)
+        val round = CardModelBuilder.build(session.copy(distanceKm = 22.5, congestionMin = 0, weather = null), emptyList(), emptyList(), tz)
+        assertEquals("18:40 회사에서 출발해 23km 달려 19:31 집에 도착했어요.", round.sentence)
     }
 }

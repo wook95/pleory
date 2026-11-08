@@ -71,7 +71,6 @@ class MainActivity : Activity() {
             this,
             onReplay = { app.controller.replaySummary() },
             onSkip = { app.controller.skipSummary() },
-            onEdit = { Log.i(PleoryApp.FLOW_TAG, "tap 수정 (P1)") },
             onQr = { Log.i(PleoryApp.FLOW_TAG, "tap 폰에서 열기 (P1)") },
             onSettings = ::openSettings,
         ).apply { visibility = View.GONE }
