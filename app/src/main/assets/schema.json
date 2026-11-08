@@ -21,6 +21,28 @@
         },
         "component": "service"
       }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "ADD_DRIVE_NOTES",
+        "description": "Save a spoken note to the drive journal split into structured items.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "original": {
+              "type": "string",
+              "description": "The full spoken note exactly as the user said it."
+            },
+            "items": {
+              "type": "array",
+              "description": "Items split from the note; each item is an object with text, type (thought, todo, emotion or person), emotion (down, neutral or up) and keywords (array of strings)."
+            }
+          },
+          "required": ["original", "items"]
+        },
+        "component": "service"
+      }
     }
   ]
 }

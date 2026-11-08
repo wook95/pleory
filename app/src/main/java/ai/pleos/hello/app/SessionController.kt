@@ -73,6 +73,9 @@ class SessionController(
     private class Entry(val text: String, val dbId: CompletableDeferred<Long>) {
         var generation = 0
         var items: List<StructuredItem> = emptyList()
+
+        /** Gleo 가 이미 구조화해 넘긴 항목. 있으면 구조화기를 부르지 않는다. */
+        var preset: List<StructuredItem>? = null
     }
 
     private val scope = CoroutineScope(
@@ -89,6 +92,7 @@ class SessionController(
     private var summaryJob: Job? = null
     private var summarySpeaking = false
     private var sessionDeleted = false
+    private var presetItems: List<StructuredItem>? = null
 
     val state: SessionState get() = machine.state
 
@@ -114,22 +118,42 @@ class SessionController(
 
     /** 어느 스레드에서든 호출 가능. 직렬 경로로 넘긴다. */
     fun post(event: SessionEvent) {
-        scope.launch {
-            trace("event ${redact(event)}")
-            // 끝난 회차의 STT 상한 타이머가 남아 있지 않게 한다(다른 회차의 타이머는 건드리지 않는다).
-            val endedRound = when (event) {
-                is SessionEvent.SttFinal -> event.round
-                is SessionEvent.SttFailed -> event.round
-                else -> -1
-            }
-            if (endedRound == sttTimeoutRound) cancelSttTimeout()
-            run(machine.handle(event))
-            onStateChanged?.invoke(machine.state)
+        scope.launch { dispatch(event) }
+    }
+
+    private fun dispatch(event: SessionEvent) {
+        trace("event ${redact(event)}")
+        // 끝난 회차의 STT 상한 타이머가 남아 있지 않게 한다(다른 회차의 타이머는 건드리지 않는다).
+        val endedRound = when (event) {
+            is SessionEvent.SttFinal -> event.round
+            is SessionEvent.SttFailed -> event.round
+            else -> -1
         }
+        if (endedRound == sttTimeoutRound) cancelSttTimeout()
+        run(machine.handle(event))
+        onStateChanged?.invoke(machine.state)
     }
 
     /** Gleo 음성 액션으로 받은 메모를 STT 최종 결과와 같은 경로로 저장한다. */
     fun addNoteFromVoice(text: String) = post(SessionEvent.ExternalNote(text))
+
+    /**
+     * Gleo 가 구조화까지 해서 넘긴 메모(ADD_DRIVE_NOTES). [itemsJson] 은 PRD §4-1 의 items 배열 JSON 이다.
+     * 계약에 맞으면 구조화기(Gemini)를 건너뛰고 그 항목으로 커밋하고, 안 맞으면 원문만 받은 것처럼 처리한다.
+     */
+    fun addStructuredNoteFromVoice(original: String, itemsJson: String) {
+        val parsed = StructureContract.parse("{\"items\":$itemsJson}")
+        if (parsed !is StructureResult.Ok) {
+            trace("gleo items rejected: ${(parsed as StructureResult.Failed).reason}")
+            addNoteFromVoice(original)
+            return
+        }
+        scope.launch {
+            presetItems = parsed.items
+            dispatch(SessionEvent.ExternalNote(original))
+            presetItems = null
+        }
+    }
 
     /** 이전에 PENDING 으로 남은 발화를 다시 구조화한다(다음 시동, D12). */
     fun reprocessPending() {
@@ -219,6 +243,7 @@ class SessionController(
             is SessionCommand.SaveUtterance -> {
                 renewSessionIfDeleted()
                 val entry = Entry(c.text, CompletableDeferred())
+                entry.preset = presetItems
                 entries[c.utteranceId] = entry
                 val session = sessionId
                 val snap = context.snapshot()
@@ -238,6 +263,12 @@ class SessionController(
             is SessionCommand.StartStructure -> {
                 val entry = entries[c.utteranceId] ?: return
                 entry.generation = c.generation
+                entry.preset?.let { preset ->
+                    entry.preset = null
+                    entry.items = preset
+                    post(SessionEvent.LlmDone(c.utteranceId, c.generation))
+                    return
+                }
                 scope.launch {
                     val result = withTimeoutOrNull(structureTimeoutMs) { structurer.structure(entry.text) }
                     val parsed = (result as? StructurerResult.Ok)?.let { StructureContract.parse(it.rawJsonText) }

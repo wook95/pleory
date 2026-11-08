@@ -45,10 +45,10 @@ class SessionStateMachineTest {
         assertEquals(SessionState.SESSION_OPEN, m.state)
     }
 
-    @Test fun 외부_메모는_STT_없이_저장_적어뒀어_구조화() {
+    @Test fun 외부_메모는_STT_없이_저장_구조화하고_말하지_않음() {
         open()
         val c = send(ExternalNote("우유 사기"))
-        assertEquals(listOf(SaveUtterance(1, "우유 사기", 0), Say("적어뒀어"), StartStructure(1, 1)), c)
+        assertEquals(listOf(SaveUtterance(1, "우유 사기", 0), StartStructure(1, 1)), c)
         assertEquals(SessionState.SESSION_OPEN, m.state)
     }
 

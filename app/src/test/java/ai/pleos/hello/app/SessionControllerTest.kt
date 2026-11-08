@@ -214,6 +214,47 @@ class SessionControllerTest {
         assertEquals(before + 1, store.sessionCreates.get())
     }
 
+    @Test fun gleoStructuredNote_skipsStructurer_commitsGleoItems() {
+        val calls = AtomicInteger()
+        val counting = object : Structurer {
+            override suspend fun structure(text: String): StructurerResult {
+                calls.incrementAndGet()
+                return RuleStructurer().structure(text)
+            }
+        }
+        val c = controller(counting)
+        c.post(SessionEvent.IgnitionOn)
+        c.addStructuredNoteFromVoice(
+            TEXT,
+            """[{"text":"내일 거래처 서류 다시 보내야 해","type":"todo","emotion":"neutral","keywords":["거래처","서류"]},""" +
+                """{"text":"아 노을 예쁘다","type":"thought","emotion":"up","keywords":["노을"]}]""",
+        )
+        awaitUntil { store.replaceCalls.get() == 1 }
+        val items = store.items.getValue(1)
+        assertEquals(listOf(ItemType.TODO, ItemType.THOUGHT), items.map { it.type })
+        assertEquals(listOf("거래처", "서류"), items[0].keywords)
+        assertEquals(TEXT, store.utterances.getValue(1).text)
+        assertEquals(LlmStatus.DONE, store.utterances.getValue(1).llmStatus)
+        assertEquals(0, calls.get())
+        assertTrue(speechOut.said.isEmpty()) // Gleo 경로는 우리가 말하지 않는다
+    }
+
+    @Test fun gleoStructuredNote_invalidItems_fallsBackToStructurer() {
+        val calls = AtomicInteger()
+        val counting = object : Structurer {
+            override suspend fun structure(text: String): StructurerResult {
+                calls.incrementAndGet()
+                return RuleStructurer().structure(text)
+            }
+        }
+        val c = controller(counting)
+        c.post(SessionEvent.IgnitionOn)
+        c.addStructuredNoteFromVoice(TEXT, """[{"text":"x","type":"todo","emotion":"angry"}]""")
+        awaitUntil { store.replaceCalls.get() == 1 }
+        assertEquals(1, calls.get())
+        assertEquals(LlmStatus.DONE, store.utterances.getValue(1).llmStatus)
+    }
+
     @Test fun replaceItems_isAnnotatedTransaction() {
         val bytes = ItemDao::class.java.getResourceAsStream("ItemDao.class")!!.readBytes()
         val text = String(bytes, Charsets.ISO_8859_1)

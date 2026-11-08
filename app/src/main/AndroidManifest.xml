@@ -34,12 +34,15 @@
                 android:value="true" />
         </activity>
 
-        <!-- Gleo AI 음성 액션. 보내는 쪽이 쥐는 보호 권한이 문서에 없어 exported 로 연다. -->
+        <!-- Gleo AI 음성 액션. 보내는 쪽이 쥐는 보호 권한이 문서에 없어 exported 로 연다.
+             실측: Gleo 는 action 을 "<packageName>.<function>" 으로 보낸다. 맨 이름은 문서 예시 호환. -->
         <receiver
             android:name=".gleo.GleoActionReceiver"
             android:exported="true">
             <intent-filter>
+                <action android:name="ai.pleos.hello.ADD_DRIVE_NOTE" />
                 <action android:name="ADD_DRIVE_NOTE" />
+                <action android:name="ai.pleos.hello.ADD_DRIVE_NOTES" />
             </intent-filter>
         </receiver>
     </application>

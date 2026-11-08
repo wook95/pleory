@@ -160,12 +160,15 @@ class SessionStateMachine {
         startStructure(id, out)
     }
 
-    /** 세션이 열려 있을 때만 받는다. 듣는 중에는 TTS 가 마이크에 섞이지 않게 "적어뒀어"를 생략한다. */
+    /**
+     * 세션이 열려 있을 때만 받는다. Gleo 경로라 "적어뒀어"는 말하지 않는다 — 실측상 우리 TTS 의 오디오 포커스
+     * 요청이 Gleo 를 LOSS_TRANSIENT 로 끊어 Sleeping 으로 보내고, 그러면 Gleo 가 우리 응답을 Reject 한다.
+     * 확인 음성은 응답 mode=voice 로 Gleo 가 낸다.
+     */
     private fun onExternalNote(text: String, out: MutableList<SessionCommand>) {
         if (state == SessionState.OFF || state == SessionState.CLOSED || text.isBlank()) return
         val id = ++utteranceCounter
         out += SessionCommand.SaveUtterance(id, text, 0)
-        if (state != SessionState.LISTENING) out += SessionCommand.Say("적어뒀어")
         startStructure(id, out)
     }
 
