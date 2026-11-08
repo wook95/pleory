@@ -38,6 +38,9 @@ interface SpeechInput {
 interface SpeechOutput {
     var onDone: (() -> Unit)?
 
+    /** 일시 손실로 멈췄던 발화를 다시 읽기 시작했다(직렬 경로). 요약 15초 상한을 다시 잰다. */
+    var onResumed: (() -> Unit)?
+
     /** [resumable] 이면 일시적 포커스 손실(내비 안내·Gleo) 동안 멈췄다가 포커스가 돌아오면 처음부터 다시 읽는다(요약). */
     fun say(text: String, resumable: Boolean = false)
     fun stop()
@@ -170,6 +173,7 @@ class PleosSpeechOutput(context: Context, private val post: Post) : SpeechOutput
     private var paused = false
 
     override var onDone: (() -> Unit)? = null
+    override var onResumed: (() -> Unit)? = null
 
     private val sdkListener = object : EventListener {
         override fun onStart() = Unit
@@ -263,6 +267,7 @@ class PleosSpeechOutput(context: Context, private val post: Post) : SpeechOutput
                 Log.i(TAG, "tts focus regained, resume")
                 paused = false
                 text?.let(::speakNow)
+                onResumed?.invoke()
             }
             FocusPolicy.Change.STOP -> {
                 Log.i(TAG, "tts focus lost $change")

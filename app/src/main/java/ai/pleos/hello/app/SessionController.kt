@@ -91,6 +91,7 @@ class SessionController(
     private var sttTimeoutRound = -1
     private var summarySeq = 0
     private var summaryJob: Job? = null
+    private var summaryCapJob: Job? = null
     private var summarySpeaking = false
     private var sessionDeleted = false
     private var presetItems: List<StructuredItem>? = null
@@ -124,6 +125,15 @@ class SessionController(
             scope.launch {
                 trace("tts onDone")
                 if (summarySpeaking) endSummary(stopSpeech = false, notifyDone = true)
+            }
+        }
+        // 일시 포커스 손실 뒤 처음부터 다시 읽으므로 15초 상한도 다시 잰다
+        speechOut.onResumed = {
+            scope.launch {
+                if (summarySpeaking) {
+                    trace("summary resumed")
+                    startSummaryCap(summarySeq)
+                }
             }
         }
     }
@@ -413,11 +423,7 @@ class SessionController(
                 if (BuildConfig.DEBUG) trace("summary speak: $text")
                 outputs.summaryStarted(text)
                 speechOut.say(text, resumable = true)
-                delay(SUMMARY_MAX_MS)
-                if (seq == summarySeq) {
-                    trace("summary 15s hard stop")
-                    endSummary(stopSpeech = true, notifyDone = true)
-                }
+                startSummaryCap(seq)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -428,11 +434,25 @@ class SessionController(
         }
     }
 
+    /** 요약 [seq] 회차를 15초 뒤 끊는다. 다시 부르면 처음부터 다시 잰다. */
+    private fun startSummaryCap(seq: Int) {
+        summaryCapJob?.cancel()
+        summaryCapJob = scope.launch {
+            delay(SUMMARY_MAX_MS)
+            if (seq == summarySeq) {
+                trace("summary 15s hard stop")
+                endSummary(stopSpeech = true, notifyDone = true)
+            }
+        }
+    }
+
     /** 재생 중이던 요약을 정리한다. 대기 중인 시작 요청도 무효로 만든다. */
     private fun endSummary(stopSpeech: Boolean, notifyDone: Boolean) {
         summarySeq++
         summaryJob?.cancel()
         summaryJob = null
+        summaryCapJob?.cancel()
+        summaryCapJob = null
         val wasPlaying = summaryText != null
         summaryText = null
         summarySpeaking = false

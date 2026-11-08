@@ -81,6 +81,7 @@ private class FakeIn : SpeechInput {
 
 private class FakeOut : SpeechOutput {
     override var onDone: (() -> Unit)? = null
+    override var onResumed: (() -> Unit)? = null
     val said = CopyOnWriteArrayList<String>()
     override fun say(text: String, resumable: Boolean) { said += text }
     override fun stop() = Unit
