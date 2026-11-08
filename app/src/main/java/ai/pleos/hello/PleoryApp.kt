@@ -6,13 +6,13 @@ import ai.pleos.hello.app.SessionController
 import ai.pleos.hello.app.SessionOutputs
 import ai.pleos.hello.core.Clock
 import ai.pleos.hello.core.DemoClock
-import ai.pleos.hello.core.RuleStructurer
 import ai.pleos.hello.core.SessionEvent
 import ai.pleos.hello.core.SystemClock
 import ai.pleos.hello.data.PleoryDb
 import ai.pleos.hello.data.RoomPleoryStore
 import ai.pleos.hello.data.Segment
 import ai.pleos.hello.data.Session
+import ai.pleos.hello.platform.GeminiStructurer
 import ai.pleos.hello.platform.SdkHub
 import ai.pleos.hello.platform.Gear
 import android.Manifest
@@ -76,7 +76,8 @@ class PleoryApp : Application() {
         speechInput = PcmInjectableSpeechInput(sdkHub.speechInput)
         controller = SessionController(
             store = RoomPleoryStore(db),
-            structurer = RuleStructurer(), // T7: GeminiStructurer 로 교체
+            // 공모전은 Gemini. 플랫폼 LLM(Gleo AI)이 서드파티에 열리면 PleosLlmStructurer로 전환 (TRD D6)
+            structurer = GeminiStructurer(),
             speechIn = speechInput,
             speechOut = sdkHub.speechOutput,
             outputs = LoggingOutputs(),
