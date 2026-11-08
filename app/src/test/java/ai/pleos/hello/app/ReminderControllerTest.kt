@@ -24,7 +24,9 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.util.TimeZone
 import java.util.concurrent.CopyOnWriteArrayList
-import java.util.concurrent.Executors
+import java.util.concurrent.LinkedBlockingQueue
+import java.util.concurrent.ThreadPoolExecutor
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 
 private const val DAY = 24 * 60 * 60 * 1000L
@@ -93,7 +95,7 @@ private object HomeContext : ContextProvider {
 }
 
 class ReminderControllerTest {
-    private val executor = Executors.newSingleThreadExecutor()
+    private val executor = ThreadPoolExecutor(1, 1, 0L, TimeUnit.MILLISECONDS, LinkedBlockingQueue())
     private val store = RemindStore()
     private val out = SayOut()
     private val traces = CopyOnWriteArrayList<String>()
@@ -128,6 +130,11 @@ class ReminderControllerTest {
             check(System.currentTimeMillis() < end) { "조건 대기 시간 초과" }
             Thread.sleep(10)
         }
+    }
+
+    /** 직렬 경로(단일 스레드)에 쌓인 일을 다 처리할 때까지 기다린다. delay 없는 경로의 부정 단언 앞에서 쓴다. */
+    private fun drain() {
+        do executor.submit {}.get() while (executor.queue.isNotEmpty())
     }
 
     @Test fun arrival_speaksReminderBeforeSummary_once_andMarksReminded() {
@@ -229,17 +236,20 @@ class ReminderControllerTest {
         awaitUntil { out.said.isNotEmpty() }
         assertEquals(SessionState.CARD, c.state)
         assertEquals("오늘은 말이 없었네. 그래도 여기까지 왔어.", out.said.single())
-        Thread.sleep(200)
+        drain()
         assertTrue(store.remindedCalls.isEmpty())
     }
 
     @Test fun cardHidden_summaryAndReminderHeld_thenSpokenOnceOnReturn() {
         store.candidates += todo(1)
         val c = controller()
+        c.post(SessionEvent.IgnitionOn) // 막힘은 세션 단위다(새 세션·S0 에서 풀린다). 세션이 열린 뒤에 막는다
         c.holdSummary(true) // 지난 기록·설정이 카드를 가린 채 도착(늦은 커밋으로 요약이 시작되는 경우와 같다)
-        arrive(c)
+        c.post(SessionEvent.GearChanged(Gear.D))
+        c.post(SessionEvent.GearChanged(Gear.P))
+        c.post(SessionEvent.Arrived)
         awaitUntil { traces.contains("summary owed") }
-        Thread.sleep(200)
+        drain()
         assertTrue("카드가 안 보이면 말하지 않는다", out.said.isEmpty())
         assertTrue(store.remindedCalls.isEmpty())
         assertEquals(null, c.summaryText)
@@ -249,7 +259,7 @@ class ReminderControllerTest {
         assertTrue(out.said.single().startsWith("어제 퇴근길에 할 일 하나 말했어."))
         awaitUntil { store.remindedCalls.size == 1 }
         c.holdSummary(false) // 다시 그려도 한 번만
-        Thread.sleep(200)
+        drain()
         assertEquals(1, out.said.size)
     }
 
@@ -260,7 +270,20 @@ class ReminderControllerTest {
         c.holdSummary(true)
         awaitUntil { c.summaryText == null }
         c.holdSummary(false)
-        Thread.sleep(200)
+        drain()
         assertEquals(1, out.said.size)
+    }
+
+    @Test fun heldThenS0_nextArrivalCardSpeaks() {
+        val c = controller()
+        arrive(c)
+        awaitUntil { c.summaryText != null }
+        c.holdSummary(true) // 카드를 가린 채 Activity 가 멈춤(holdSummary(false) 가 오지 않는다)
+        awaitUntil { c.summaryText == null }
+        c.post(SessionEvent.GearChanged(Gear.D)) // 다시 출발 → 새 세션, S0
+        c.post(SessionEvent.GearChanged(Gear.P))
+        c.post(SessionEvent.Arrived)
+        awaitUntil { out.said.size == 2 }
+        assertEquals(SessionState.CARD, c.state)
     }
 }

@@ -406,6 +406,7 @@ class SessionController(
             is SessionCommand.KeepPending -> Unit // PENDING 은 저장 시점의 값이 그대로 유지된다
             SessionCommand.ShowS0 -> {
                 summaryOwed = false
+                summaryHeld = false // 가린 채 Activity 가 멈췄으면 holdSummary(false) 가 오지 않는다. 다음 카드에 넘기지 않는다
                 endSummary(stopSpeech = true, notifyDone = false)
                 outputs.showS0()
             }
@@ -439,6 +440,7 @@ class SessionController(
                 reminders = emptyList()
                 reminderUnspoken = false
                 summaryOwed = false
+                summaryHeld = false
                 val startedAt = clock.nowMillis()
                 sessionStartedAt = startedAt
                 context.onSessionStart()
