@@ -6,6 +6,7 @@ import ai.pleos.hello.app.SessionController
 import ai.pleos.hello.app.SessionOutputs
 import ai.pleos.hello.core.Clock
 import ai.pleos.hello.core.ConsentGatedStructurer
+import ai.pleos.hello.core.FallbackStructurer
 import ai.pleos.hello.core.ScreenGate
 import ai.pleos.hello.core.DemoClock
 import ai.pleos.hello.core.DestinationState as CoreDestination
@@ -20,6 +21,7 @@ import ai.pleos.hello.data.PleoryDb
 import ai.pleos.hello.data.RoomPleoryStore
 import ai.pleos.hello.data.Segment
 import ai.pleos.hello.data.Session
+import ai.pleos.hello.platform.ClaudeStructurer
 import ai.pleos.hello.platform.GeminiStructurer
 import ai.pleos.hello.platform.DestinationState
 import ai.pleos.hello.platform.Gear
@@ -122,9 +124,10 @@ class PleoryApp : Application() {
         speechInput = PcmInjectableSpeechInput(sdkHub.speechInput)
         controller = SessionController(
             store = RoomPleoryStore(db),
-            // 공모전은 Gemini. 플랫폼 LLM(Gleo AI)이 서드파티에 열리면 PleosLlmStructurer로 전환 (TRD D6)
-            // 동의가 없거나 철회됐으면 Gemini 를 부르지 않고 RAW 로 남긴다(TRD §8-1 1번)
-            structurer = ConsentGatedStructurer({ consent.llmAllowed }, GeminiStructurer(), { Log.i(FLOW_TAG, it) }),
+            // 공모전은 Claude(claude-haiku-5-5) → 실패하면 Gemini → 그래도 실패하면 RAW, 전부 컨트롤러 8초 안(TRD D6).
+            // 플랫폼 LLM(Gleo AI)이 서드파티에 열리면 PleosLlmStructurer로 전환
+            // 동의가 없거나 철회됐으면 외부 LLM 을 부르지 않고 RAW 로 남긴다(TRD §8-1 1번)
+            structurer = ConsentGatedStructurer({ consent.llmAllowed }, llmChain(), { Log.i(FLOW_TAG, it) }),
             speechIn = speechInput,
             speechOut = sdkHub.speechOutput,
             outputs = outputs,
@@ -149,6 +152,19 @@ class PleoryApp : Application() {
         wireArrival()
         controller.reprocessPending()
         startLocationIfPermitted()
+    }
+
+    /** Claude 키가 있으면 Claude 4.5초 → Gemini 나머지(약 3.4초), 없으면 Gemini 단독으로 8초. */
+    private fun llmChain(): FallbackStructurer {
+        val claude = ClaudeStructurer(timeoutMs = CLAUDE_BUDGET_MS)
+        val gemini = GeminiStructurer(budgetMs = if (claude.available) GEMINI_AFTER_CLAUDE_MS else 8_000)
+        return FallbackStructurer(
+            listOf(
+                FallbackStructurer.Step("claude", claude, timeoutMs = CLAUDE_BUDGET_MS, available = { claude.available }),
+                FallbackStructurer.Step("gemini", gemini),
+            ),
+            trace = { Log.i(FLOW_TAG, it) },
+        )
     }
 
     /**
@@ -305,6 +321,8 @@ class PleoryApp : Application() {
         const val FLOW_TAG = "PleoryFlow"
         private const val ARRIVAL_RADIUS_M = 300.0
         private const val PARK_HOLD_MS = 5_000L
+        private const val CLAUDE_BUDGET_MS = 4_500L
+        private const val GEMINI_AFTER_CLAUDE_MS = 3_400
         val LOCATION_PERMISSIONS = arrayOf(
             Manifest.permission.ACCESS_FINE_LOCATION,
             Manifest.permission.ACCESS_COARSE_LOCATION,

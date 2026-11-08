@@ -14,7 +14,7 @@ sealed interface StructurerResult {
 
 /**
  * 발화 텍스트를 PRD §4-1 JSON 으로 구조화한다. 시그니처는 텍스트만 받는다(프라이버시 원칙: 위치·궤적은 보내지 않는다).
- * 공모전은 Gemini. 플랫폼 LLM(Gleo AI)이 서드파티에 열리면 PleosLlmStructurer로 전환
+ * 공모전은 Claude(claude-haiku-5-5) 1순위, 실패하면 Gemini(TRD D6). 플랫폼 LLM(Gleo AI)이 서드파티에 열리면 PleosLlmStructurer로 전환
  */
 interface Structurer {
     suspend fun structure(text: String): StructurerResult

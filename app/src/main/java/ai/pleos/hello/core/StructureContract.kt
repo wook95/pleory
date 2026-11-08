@@ -25,6 +25,17 @@ sealed interface StructureResult {
 object StructureContract {
     const val MAX_ITEMS = 5
 
+    /** 구조화 LLM(Claude·Gemini 공통) 시스템 프롬프트. 사용자 메시지는 발화 텍스트뿐이다. */
+    const val SYSTEM_PROMPT = """당신은 운전자가 운전 중에 떠오르는 대로 말한 한마디를 정리한다.
+규칙:
+1. 여러 생각이 섞여 있으면 항목으로 나눈다. 한 항목은 한 문장. 최대 5개.
+2. 각 항목의 type은 thought(생각) / todo(할 일) / emotion(감정) / person(사람) 중 하나.
+3. emotion은 down / neutral / up 중 하나. 할 일은 보통 neutral.
+4. 말투는 다듬되 뜻을 바꾸지 않는다. 없는 내용을 추가하지 않는다.
+5. 정리할 수 없으면 원문을 그대로 1개 항목(type=raw, emotion=neutral, keywords=[])으로 돌려준다.
+6. 항목 text는 "내일 거래처 서류 다시 보내기", "노을이 예뻤다"처럼 짧고 담백한 메모체로 쓴다. "~합니다" 같은 존댓말·설명체는 쓰지 않는다.
+JSON만 출력한다. 코드펜스·설명 금지."""
+
     fun parse(response: String): StructureResult {
         val root = try {
             MiniJson.parse(response)

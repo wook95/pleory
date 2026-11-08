@@ -1,6 +1,7 @@
 package ai.pleos.hello.platform
 
 import ai.pleos.hello.BuildConfig
+import ai.pleos.hello.core.StructureContract
 import ai.pleos.hello.core.Structurer
 import ai.pleos.hello.core.StructurerResult
 import kotlinx.coroutines.CoroutineScope
@@ -22,7 +23,7 @@ import java.net.UnknownHostException
 
 /**
  * Gemini REST 구조화(PRD §4-1). 보내는 것은 발화 텍스트뿐이다(프라이버시 원칙: 위치·궤적 없음).
- * 공모전은 Gemini. 플랫폼 LLM(Gleo AI)이 서드파티에 열리면 PleosLlmStructurer로 전환
+ * 공모전은 Claude 1순위, 이 Gemini 는 Claude 가 실패했거나 키가 없을 때의 대체(TRD D6). 플랫폼 LLM(Gleo AI)이 서드파티에 열리면 PleosLlmStructurer로 전환
  *
  * - 코루틴이 취소되면(컨트롤러 8초 타임아웃 포함) 연결을 닫아 블로킹 읽기를 즉시 끊는다.
  * - 5xx/429 는 [budgetMs] 안에서 1회만 재시도한다.
@@ -107,7 +108,7 @@ class GeminiStructurer(
     }
 
     private fun requestBody(text: String): String = JSONObject()
-        .put("systemInstruction", JSONObject().put("parts", JSONArray().put(JSONObject().put("text", SYSTEM))))
+        .put("systemInstruction", JSONObject().put("parts", JSONArray().put(JSONObject().put("text", StructureContract.SYSTEM_PROMPT))))
         .put("contents", JSONArray().put(JSONObject().put("role", "user")
             .put("parts", JSONArray().put(JSONObject().put("text", text)))))
         .put("generationConfig", JSONObject()
@@ -122,15 +123,6 @@ class GeminiStructurer(
         const val MODEL = "gemini-2.5-flash" // flash-lite 는 빈말에 없는 문장을 지어냈다(규칙 4 위반)
         const val RETRY_DELAY_MS = 300L
         const val MIN_RETRY_MS = 1_500L
-        const val SYSTEM = """당신은 운전자가 운전 중에 떠오르는 대로 말한 한마디를 정리한다.
-규칙:
-1. 여러 생각이 섞여 있으면 항목으로 나눈다. 한 항목은 한 문장. 최대 5개.
-2. 각 항목의 type은 thought(생각) / todo(할 일) / emotion(감정) / person(사람) 중 하나.
-3. emotion은 down / neutral / up 중 하나. 할 일은 보통 neutral.
-4. 말투는 다듬되 뜻을 바꾸지 않는다. 없는 내용을 추가하지 않는다.
-5. 정리할 수 없으면 원문을 그대로 1개 항목(type=raw, emotion=neutral, keywords=[])으로 돌려준다.
-6. 항목 text는 "내일 거래처 서류 다시 보내기", "노을이 예뻤다"처럼 짧고 담백한 메모체로 쓴다. "~합니다" 같은 존댓말·설명체는 쓰지 않는다.
-JSON만 출력한다. 코드펜스·설명 금지."""
         const val SCHEMA = """{"type":"OBJECT","properties":{"items":{"type":"ARRAY","items":{"type":"OBJECT","properties":{
 "text":{"type":"STRING"},"type":{"type":"STRING","enum":["thought","todo","emotion","person","raw"]},
 "emotion":{"type":"STRING","enum":["down","neutral","up"]},"keywords":{"type":"ARRAY","items":{"type":"STRING"}}},
