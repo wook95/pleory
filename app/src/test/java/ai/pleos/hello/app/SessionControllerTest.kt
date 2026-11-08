@@ -45,8 +45,18 @@ private class FakeStore : PleoryStore {
         sessionCreates.incrementAndGet()
         return 1L
     }
+    /** 저장소 쓰기 순서(항목 삭제 → 전체 삭제 대기 확인용) */
+    val writes = CopyOnWriteArrayList<String>()
+    val deletedItems = java.util.concurrent.ConcurrentHashMap.newKeySet<Long>()
+    @Volatile var deleteItemDelayMs = 0L
+    override suspend fun deleteItem(itemId: Long) {
+        if (deleteItemDelayMs > 0) delay(deleteItemDelayMs)
+        deletedItems += itemId
+        writes += "deleteItem:$itemId"
+    }
     override suspend fun deleteAll() {
-        utterances.clear(); items.clear(); sessions.clear()
+        utterances.clear(); items.clear(); sessions.clear(); deletedItems.clear()
+        writes += "deleteAll"
     }
     override suspend fun setSessionState(sessionId: Long, state: SessionState) = Unit
     override suspend fun closeSession(sessionId: Long, endedAt: Long) { closed += sessionId }
@@ -87,12 +97,16 @@ private class FakeOut : SpeechOutput {
     override fun stop() = Unit
 }
 
-private object NoOutputs : SessionOutputs {
+private open class CountingOutputs : SessionOutputs {
+    val refreshes = AtomicInteger()
     override fun showS0() = Unit
     override fun showCard() = Unit
     override fun startSummary() = Unit
     override fun stopSummary() = Unit
+    override fun refreshCard() { refreshes.incrementAndGet() }
 }
+
+private object NoOutputs : CountingOutputs()
 
 private class FixedContextProvider : ContextProvider {
     override fun profileId() = "local"
@@ -112,8 +126,8 @@ class SessionControllerTest {
 
     @After fun tearDown() = executor.shutdownNow().let { }
 
-    private fun controller(structurer: Structurer, timeoutMs: Long = 8_000) = SessionController(
-        store, structurer, speechIn, speechOut, NoOutputs, FixedContextProvider(), FixedClock(),
+    private fun controller(structurer: Structurer, timeoutMs: Long = 8_000, outputs: SessionOutputs = NoOutputs) = SessionController(
+        store, structurer, speechIn, speechOut, outputs, FixedContextProvider(), FixedClock(),
         executor.asCoroutineDispatcher(), structureTimeoutMs = timeoutMs,
     )
 
@@ -130,6 +144,25 @@ class SessionControllerTest {
             check(System.currentTimeMillis() < end) { "조건 대기 시간 초과" }
             Thread.sleep(10)
         }
+    }
+
+    @Test fun deleteItem_softDeletesInStore_thenRefreshesCard() {
+        val out = CountingOutputs()
+        val c = controller(RuleStructurer(), outputs = out)
+        c.deleteItem(7L)
+        awaitUntil { out.refreshes.get() == 1 }
+        assertEquals(setOf(7L), store.deletedItems.toSet())
+    }
+
+    @Test fun deleteAll_waitsForInFlightItemDelete() {
+        val c = controller(RuleStructurer())
+        store.deleteItemDelayMs = 200
+        c.deleteItem(3L)
+        var done = false
+        c.deleteAllData { done = true }
+        awaitUntil { done }
+        assertEquals(listOf("deleteItem:3", "deleteAll"), store.writes.toList())
+        assertTrue("전체 삭제는 소프트 삭제 표시도 지운다", store.deletedItems.isEmpty())
     }
 
     @Test fun ruleStructurer_twoItems_todoNeutral_emotionUp() {

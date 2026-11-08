@@ -80,6 +80,17 @@ class CardModelTest {
     fun `삭제된 항목은 빠지고 수정문이 우선한다`() {
         val m = build(listOf(twoItems[0].copy(editedText = "서류 재전송"), twoItems[1].copy(deleted = true)))
         assertEquals(listOf("서류 재전송"), m.utterances[1].items.map { it.text })
+        assertEquals("항목 수·감정 흐름(요약 입력)도 지운 항목을 뺀다", listOf(Emotion.DOWN, Emotion.NEUTRAL), m.items.map { it.emotion })
+        val all = build(twoItems.map { it.copy(deleted = true) })
+        assertEquals("한마디는 남고 항목만 0개", 2, all.utterances.size)
+        assertEquals(emptyList<String>(), all.utterances[1].items.map { it.text })
+    }
+
+    @Test
+    fun `항목 id - DB 행이 있으면 그 id, 구조화 전 원문 한 줄은 null`() {
+        val m = build(twoItems.mapIndexed { i, it -> it.copy(id = 10L + i) })
+        assertEquals(listOf(10L, 11L), m.utterances[1].items.map { it.id })
+        assertEquals(listOf<Long?>(null), build(emptyList()).utterances[1].items.map { it.id })
     }
 
     @Test

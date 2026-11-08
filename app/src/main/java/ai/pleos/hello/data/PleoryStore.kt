@@ -23,6 +23,9 @@ interface PleoryStore {
     suspend fun replaceItems(utteranceId: Long, items: List<StructuredItem>, status: LlmStatus)
     suspend fun setLlmStatus(utteranceId: Long, status: LlmStatus)
 
+    /** 항목 하나를 지운 것으로 표시한다(소프트 삭제). 카드·요약은 다음 읽기부터 이 항목을 빼고 센다. */
+    suspend fun deleteItem(itemId: Long)
+
     /** 카드 표시 시점의 종료값과 궤적을 Session 행에 쓰고 state 를 CARD 로 바꾼다. */
     suspend fun finishSession(sessionId: Long, endedAt: Long, end: SessionEnd, track: List<TrackSample>) {}
     suspend fun setSummaryText(sessionId: Long, text: String) {}
@@ -61,6 +64,8 @@ class RoomPleoryStore(private val db: PleoryDb) : PleoryStore {
     }
 
     override suspend fun setLlmStatus(utteranceId: Long, status: LlmStatus) = db.utterances().setStatus(utteranceId, status)
+
+    override suspend fun deleteItem(itemId: Long) = db.items().markDeleted(itemId)
 
     override suspend fun finishSession(sessionId: Long, endedAt: Long, end: SessionEnd, track: List<TrackSample>) {
         val dao = db.sessions()

@@ -58,6 +58,7 @@ internal object Tok {
     const val BTN_R = 20
     const val PLATE_R = 28
     const val PRESS_MS = 150L
+    const val ICON_BTN = 72       // 항목 ⋯
 
     fun emotionColor(e: Emotion) = when (e) {
         Emotion.DOWN -> DOWN
@@ -201,6 +202,14 @@ internal class BackGlyph(c: Context, ink: Int) : View(c) {
         p.strokeWidth = w * 0.09f
         c.drawLine(w * 0.18f, h * 0.5f, w * 0.84f, h * 0.5f, p)
         c.drawPath(Path().apply { moveTo(w * 0.46f, h * 0.2f); lineTo(w * 0.18f, h * 0.5f); lineTo(w * 0.46f, h * 0.8f) }, p)
+    }
+}
+
+internal class MoreGlyph(c: Context, ink: Int) : View(c) {
+    private val p = Paint(Paint.ANTI_ALIAS_FLAG).also { it.color = ink }
+    override fun onDraw(c: Canvas) {
+        val w = width.toFloat(); val h = height.toFloat(); val r = w * 0.08f
+        for (i in 0..2) c.drawCircle(w * (0.22f + 0.28f * i), h * 0.5f, r, p)
     }
 }
 

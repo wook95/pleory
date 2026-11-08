@@ -12,8 +12,9 @@ import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
 
-/** 카드의 항목 한 줄. 시각·장소는 [CardUtterance] 에 있다. */
+/** 카드의 항목 한 줄. 시각·장소는 [CardUtterance] 에 있다. [id] 는 DB Item id — 구조화 전 원문 한 줄은 아직 행이 없어 null(지울 수 없음). */
 data class CardItem(
+    val id: Long?,
     val text: String,
     val type: ItemType,
     val emotion: Emotion,
@@ -116,9 +117,9 @@ object CardModelBuilder {
     private fun utteranceCard(u: Utterance, items: List<Item>, tz: TimeZone): CardUtterance {
         val time = CardFormat.time(u.at, tz)
         val cardItems = if (items.isEmpty()) {
-            listOf(CardItem(u.text, ItemType.RAW, Emotion.NEUTRAL, emptyList()))
+            listOf(CardItem(null, u.text, ItemType.RAW, Emotion.NEUTRAL, emptyList()))
         } else {
-            items.filter { !it.deleted }.sortedBy { it.order }.map { CardItem(it.editedText ?: it.text, it.type, it.emotion, it.keywords) }
+            items.filter { !it.deleted }.sortedBy { it.order }.map { CardItem(it.id, it.editedText ?: it.text, it.type, it.emotion, it.keywords) }
         }
         val point = if (u.lat != null && u.lng != null) GeoPoint(u.lat, u.lng) else null
         return CardUtterance(time, u.placeLabel, u.congested, u.text, cardItems, point)

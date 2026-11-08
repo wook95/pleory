@@ -73,6 +73,8 @@ class MainActivity : Activity() {
             onSkip = { app.controller.skipSummary() },
             onQr = { Log.i(PleoryApp.FLOW_TAG, "tap 폰에서 열기 (P1)") },
             onSettings = ::openSettings,
+            // 카드는 주차·제한 없음일 때만 보이지만(ScreenGate), 탭과 기어 변경이 엇갈려도 주행 중에는 지우지 않는다
+            onDeleteItem = { id -> if (app.gateAllowed()) app.controller.deleteItem(id) },
         ).apply { visibility = View.GONE }
         // 동의는 두 버튼만 인정한다. 뒤로 가기·자동 수락은 동의로 치지 않는다.
         consentView = ConsentView(this, onAgree = { answer { it.grant(app.clock.nowMillis()) } }, onDecline = { answer { it.decline(app.clock.nowMillis()) } })
@@ -209,7 +211,8 @@ class MainActivity : Activity() {
         cardLoad?.cancel()
         val requested = cardRequested && lastState != SessionState.CARD
         cardLoad = uiScope.launch {
-            (if (requested) app.controller.loadTodayCard() else app.controller.loadCard())?.let { card.setModel(it) }
+            val m = if (requested) app.controller.loadTodayCard() else app.controller.loadCard()
+            if (m != null) card.setModel(m) else card.clearModel() // 전체 삭제 뒤에는 세션 행이 없다
         }
     }
 

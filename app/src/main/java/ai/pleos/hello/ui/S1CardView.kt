@@ -28,6 +28,7 @@ import android.widget.TextView
 /**
  * S1 카드(PRD §5, 시안 r2 A "일지"). 상자·칩·통계 타일 없이 글자 크기·굵기·여백·가는 선으로 위계를 만든다.
  * 창이 넓으면([LayoutMode.WIDE]) 왼쪽 글 58% + 오른쪽 경로 판 42%, 좁으면 한 열(날짜·제목·문장 → 감정 흐름 → 요약 → 항목 → 경로)이고
+ * 항목마다 ⋯ → 같은 자리에서 "지우기 / 취소"(취소가 ⋯ 자리에 와서 두 번 눌러도 지워지지 않는다). 지우기는 [onDeleteItem](DB Item id).
  * 아래 버튼 줄과, 재생 중일 때 그 위의 요약 자막 줄은 스크롤 밖에 고정이다(건너뛰기가 화면 밖으로 밀리지 않게). [setModel] 로 내용을, [setSummary] 로 요약 자막(재생 중에만)을 바꾼다. 배치를 바꿔도 내용·자막은 그대로다.
  */
 class S1CardView(
@@ -36,6 +37,7 @@ class S1CardView(
     private val onSkip: () -> Unit,
     private val onQr: () -> Unit,
     private val onSettings: () -> Unit = {},
+    private val onDeleteItem: (Long) -> Unit = {},
 ) : LinearLayout(context) {
 
     private val page = context.col()
@@ -61,6 +63,9 @@ class S1CardView(
     }
     private var mode: LayoutMode? = null
     private var model: CardModel? = null
+
+    /** "지우기 / 취소" 를 펼친 항목. 카드를 다시 읽어 그 항목이 사라지면 접는다. */
+    private var confirmingId: Long? = null
 
     init {
         setBackgroundColor(Tok.BG)
@@ -112,13 +117,15 @@ class S1CardView(
 
     fun setModel(m: CardModel) {
         model = m
+        if (m.items.none { it.id != null && it.id == confirmingId }) confirmingId = null
         val c = context
         page.removeAllViews()
         page.addView(c.txt(Tok.LABEL_M, Tok.SUB, tnum = true, s = m.date))
         page.addView(c.txt(Tok.HEAD_S, Tok.FG, 700, s = m.title), lp().m(t = c.dp(12)))
         page.addView(c.txt(Tok.BODY_L, Tok.SUB, tnum = true, s = m.sentence), lp().m(t = c.dp(16)))
         if (m.items.isNotEmpty()) page.addView(c.txt(Tok.BODY_M, Tok.FG, 600, s = moodLine(m.items)), lp().m(t = c.dp(32)))
-        if (m.items.isEmpty()) {
+        // 한마디가 없을 때만 빈 카드 문구. 항목을 모두 지운 경우는 한마디(원문)가 남아 아래 목록으로 간다
+        if (m.utterances.isEmpty()) {
             page.addView(c.rule(), lp(MATCH_PARENT, c.dp(1)).m(t = c.dp(40)))
             page.addView(c.txt(Tok.BODY_M, Tok.FG, 600, s = "남긴 한마디가 없어요"), lp().m(t = c.dp(32)))
             page.addView(c.txt(Tok.BODY_S, Tok.SUB, s = "다음에는 운전 중에 말하기 버튼을 누르고 떠오르는 대로 말해 보세요."), lp().m(t = c.dp(8)))
@@ -131,6 +138,27 @@ class S1CardView(
             }
         }
         route.setModel(m)
+    }
+
+    /**
+     * 읽을 카드가 없을 때(전체 삭제 뒤 같은 세션 카드를 다시 열면 세션 행이 없다). 지난 내용과 지우기 버튼을 남기지 않는다.
+     */
+    fun clearModel() {
+        model = null
+        confirmingId = null
+        page.removeAllViews()
+        page.addView(context.txt(Tok.BODY_M, Tok.FG, 600, s = "기록을 모두 지웠어요"))
+        page.addView(context.txt(Tok.BODY_S, Tok.SUB, s = "다음 주행부터 다시 쌓여요."), lp().m(t = context.dp(8)))
+        route.clear()
+    }
+
+    /** 카드가 가려지면(주행 재개·설정 열기) 펼쳐 둔 "지우기 / 취소" 를 접는다 — 다시 보일 때 확인 단계가 남아 있지 않게. */
+    override fun onVisibilityChanged(changedView: View, visibility: Int) {
+        super.onVisibilityChanged(changedView, visibility)
+        if (visibility != VISIBLE && confirmingId != null) {
+            confirmingId = null
+            model?.let(::setModel)
+        }
     }
 
     /** 요약 재생 중이면 자막과 "건너뛰기" 를 보이고, null 이면 숨긴다(PRD §4-2). 재생 중에는 주 버튼이 "다시 듣기" 다. */
@@ -164,14 +192,34 @@ class S1CardView(
             if (u.congested) addView(c.txt(Tok.LABEL_S, Tok.SUB, s = "정체 중"), lp().m(t = c.dp(2)))
         }, lp(c.dp(132)))
         addView(c.col().apply {
-            if (u.items.size > 1) addView(c.txt(Tok.LABEL_M, Tok.SUB, s = "“${u.quote}”"), lp().m(b = c.dp(10)))
+            // 항목이 여럿이거나 모두 지워졌으면 말한 그대로를 보인다(지워도 원문은 남는다)
+            if (u.items.size != 1) addView(c.txt(Tok.LABEL_M, Tok.SUB, s = "“${u.quote}”"), lp().m(b = c.dp(10)))
+            if (u.items.isEmpty()) addView(c.txt(Tok.LABEL_M, Tok.SUB, s = "정리한 항목을 모두 지웠어요"), lp().m(b = c.dp(8)))
             u.items.forEach { addView(itemRow(it)) }
         }, lp(0, WRAP_CONTENT, 1f))
     }
 
-    private fun itemRow(it: CardItem) = context.col().apply {
+    private fun itemRow(it: CardItem) = context.row().apply {
         val c = context
         minimumHeight = c.dp(80)
+        addView(itemText(it), lp(0, WRAP_CONTENT, 1f))
+        val id = it.id ?: return@apply // 구조화 전 원문 한 줄은 아직 지울 행이 없다
+        if (confirmingId == id) {
+            // 지우기는 바로 접는다(두 번째 탭이 같은 요청을 또 보내지 않게). 목록은 저장 뒤 refreshCard 로 다시 읽는다
+            addView(c.button("지우기", BtnKind.DANGER, padH = 28) { confirmingId = null; onDeleteItem(id); model?.let(::setModel) }
+                .apply { contentDescription = "‘${it.text}’ 지우기" }, lp(WRAP_CONTENT).m(l = c.dp(16)))
+            val cancel = c.button("취소", BtnKind.SECONDARY, padH = 28) { confirmingId = null; model?.let(::setModel) }
+                .apply { contentDescription = "지우기 취소" }
+            addView(cancel, lp(WRAP_CONTENT).m(l = c.dp(12)))
+            cancel.post { cancel.sendAccessibilityEvent(android.view.accessibility.AccessibilityEvent.TYPE_VIEW_FOCUSED) } // 다시 그린 뒤 초점을 취소에
+        } else {
+            addView(c.iconButton(MoreGlyph(c, Tok.SUB), "‘${it.text}’ 지울지 묻기") { confirmingId = id; model?.let(::setModel) },
+                lp(c.dp(Tok.ICON_BTN), c.dp(Tok.ICON_BTN)).m(l = c.dp(8)))
+        }
+    }
+
+    private fun itemText(it: CardItem) = context.col().apply {
+        val c = context
         gravity = android.view.Gravity.CENTER_VERTICAL
         addView(c.txt(Tok.BODY_M, Tok.FG, 500, s = it.text))
         // 원문(정리 전·실패)은 감정이 정해지지 않았으므로 유형만 쓴다
@@ -204,6 +252,11 @@ class S1CardView(
 
         fun setModel(m: CardModel) {
             model = m
+            invalidate()
+        }
+
+        fun clear() {
+            model = null
             invalidate()
         }
 
@@ -242,6 +295,7 @@ class S1CardView(
 
             m.utterances.forEach { u ->
                 val at = u.point ?: return@forEach
+                if (u.items.isEmpty()) return@forEach // 항목을 모두 지운 한마디는 감정이 없으므로 핀도 없다
                 val near = idx.indices.minBy { TrackMath.distanceMeters(m.route[idx[it]], at) }
                 val (x, y) = pts[near]
                 val r = 16 * d

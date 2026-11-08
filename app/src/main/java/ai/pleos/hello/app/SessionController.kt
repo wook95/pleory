@@ -87,6 +87,9 @@ class SessionController(
     private var sessionId = CompletableDeferred<Long>()
     private var sessionStartedAt = 0L
     private var cardJob: Job? = null
+
+    /** 마지막 항목 삭제 쓰기. 요약·카드 읽기가 이 쓰기 뒤에 읽도록 기다린다. */
+    private var itemDeleteJob: Job? = null
     private var sttTimeoutJob: Job? = null
     private var sttTimeoutRound = -1
     private var summarySeq = 0
@@ -245,9 +248,26 @@ class SessionController(
         }
     }
 
+    /**
+     * 카드의 항목 하나 지우기(F9, 소프트 삭제). 저장이 끝나면 카드를 다시 읽게 한다 — 항목 수·감정 흐름·다음 요약이 이 항목을 뺀다.
+     * 전체 삭제가 이 쓰기를 기다리도록 [launchDb] 로 추적한다. 주행 중 차단은 화면 쪽(ScreenGate)이 한다.
+     */
+    fun deleteItem(itemId: Long) {
+        val previous = itemDeleteJob
+        itemDeleteJob = launchDb {
+            previous?.join()
+            store.deleteItem(itemId)
+            trace("item deleted id=$itemId")
+            // 읽는 중인 요약은 지운 항목을 담고 있으므로 멈춘다. 다시 들으면 새로 만든다
+            if (summaryText != null) endSummary(stopSpeech = true, notifyDone = true)
+            outputs.refreshCard()
+        }
+    }
+
     /** 카드 표시용 모델. 종료값 저장이 끝난 뒤에 읽는다. */
     suspend fun loadCard(): CardModel? {
         cardJob?.join()
+        itemDeleteJob?.join()
         return store.loadCard(sessionId.await())
     }
 
@@ -409,6 +429,7 @@ class SessionController(
             try {
                 val sid = session.await()
                 cardJob?.join()
+                itemDeleteJob?.join()
                 val items = store.loadCard(sid)?.items.orEmpty().map { SummaryItem(it.type, it.emotion, it.keywords) }
                 val text = SummaryComposer.compose(items)
                 if (seq != summarySeq) return@launch

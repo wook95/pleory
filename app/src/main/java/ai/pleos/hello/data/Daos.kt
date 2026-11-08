@@ -36,10 +36,17 @@ abstract class ItemDao {
     @Query("SELECT * FROM item WHERE utteranceId = :utteranceId ORDER BY `order`")
     abstract suspend fun byUtterance(utteranceId: Long): List<Item>
     @Query("DELETE FROM item WHERE utteranceId = :utteranceId") abstract suspend fun deleteByUtterance(utteranceId: Long)
+
+    /** 카드에서 항목 하나 지우기(F9). 행은 남기고 표시만 끈다 — 원문(Utterance.text)은 그대로다. */
+    @Query("UPDATE item SET deleted = 1 WHERE id = :id") abstract suspend fun markDeleted(id: Long)
     @Query("UPDATE utterance SET llmStatus = :status WHERE id = :utteranceId")
     abstract suspend fun setUtteranceStatus(utteranceId: Long, status: LlmStatus)
 
-    /** 기존 Item 삭제 + 새 Item 삽입 + llmStatus 갱신을 한 트랜잭션으로. 재처리를 몇 번 해도 Item 수가 늘지 않는다(TRD §2-1). */
+    /**
+     * 기존 Item 삭제 + 새 Item 삽입 + llmStatus 갱신을 한 트랜잭션으로. 재처리를 몇 번 해도 Item 수가 늘지 않는다(TRD §2-1).
+     * 주의: 사용자가 지운 항목([markDeleted])도 함께 지우고 새로 넣으므로 표시가 되살아난다. 지금은 항목 행이 없는 PENDING 발화만
+     * 재처리해서 문제없지만, DONE·FAILED 발화를 다시 정리하는 경로를 만들면 지운 항목을 거르거나 재처리를 막아야 한다.
+     */
     @Transaction
     open suspend fun replaceItems(utteranceId: Long, items: List<Item>, status: LlmStatus) {
         deleteByUtterance(utteranceId)
