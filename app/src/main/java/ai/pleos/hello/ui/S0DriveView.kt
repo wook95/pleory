@@ -23,6 +23,11 @@ class S0DriveView(context: Context, private val onTalk: () -> Unit, onSettings: 
     private var listening: Boolean? = null
     private var shortButton = false
 
+    private companion object {
+        /** 말하기 줄(72) + 간격(12) + 안내 줄(38) + 위아래 숨 — 이보다 낮은 띠에서는 안내를 뺀다 */
+        const val HINT_MIN_BUTTON_DP = 180
+    }
+
     init {
         setBackgroundColor(Tok.BG)
         val e = context.dp(Tok.EDGE)
@@ -42,7 +47,9 @@ class S0DriveView(context: Context, private val onTalk: () -> Unit, onSettings: 
             }, lp(0, LayoutParams.WRAP_CONTENT, 1f))
             setOnClickListener { onTalk() }
         }
-        addView(button, LayoutParams(context.dp(1586), context.dp(400), Gravity.BOTTOM or Gravity.START).apply { setMargins(e, 0, 0, e) })
+        val be = context.dp(LayoutMode.S0_EDGE_DP)
+        // 크기는 onMeasure 가 창에 맞춰 정한다
+        addView(button, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT, Gravity.BOTTOM or Gravity.START).apply { setMargins(be, 0, 0, be) })
         settings.visibility = GONE
         addView(settings, LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.END).apply { setMargins(0, e - context.dp(16), e - context.dp(12), 0) })
         setListening(false)
@@ -60,9 +67,25 @@ class S0DriveView(context: Context, private val onTalk: () -> Unit, onSettings: 
         button.layoutParams.width = context.dp(LayoutMode.s0ButtonWidthDp(wDp))
         val bh = LayoutMode.s0ButtonHeightDp(hDp)
         button.layoutParams.height = context.dp(bh)
-        shortButton = bh < 180 // 낮은 창에서는 "한 번 더 누르면 취소" 가 잘리므로 뺀다
-        hint.visibility = if (listening == true && !shortButton) VISIBLE else GONE
         super.onMeasure(widthMeasureSpec, heightMeasureSpec)
+    }
+
+    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+        super.onSizeChanged(w, h, oldw, oldh)
+        val short = LayoutMode.s0ButtonHeightDp((h / resources.displayMetrics.density).toInt()) < HINT_MIN_BUTTON_DP
+        if (short != shortButton) { shortButton = short; post { applyHint() } } // 레이아웃 패스 밖에서 바꾼다
+    }
+
+    /**
+     * 안내 줄은 듣는 중에만 보인다. 띠가 충분히 높으면 숨길 때도 자리를 남겨(INVISIBLE) "말하기" ↔ "듣고 있어요" 가
+     * 같은 자리에 있게 한다 — 주행 중 탭할 때 글자가 위아래로 움직이지 않는다. 낮은 띠에서는 자리째 뺀다(GONE).
+     */
+    private fun applyHint() {
+        hint.visibility = when {
+            shortButton -> GONE
+            listening == true -> VISIBLE
+            else -> INVISIBLE
+        }
     }
 
     /** 설정 진입. 주차(P)·제한 없음일 때만 보인다(TRD §8-1 5번). */
@@ -79,7 +102,7 @@ class S0DriveView(context: Context, private val onTalk: () -> Unit, onSettings: 
         glyph.ink = ink
         label.setTextColor(ink)
         label.text = if (listening) "듣고 있어요" else "말하기"
-        hint.visibility = if (listening && !shortButton) VISIBLE else GONE
+        applyHint()
         button.contentDescription = if (listening) "듣는 중. 누르면 취소" else "말하기"
     }
 
