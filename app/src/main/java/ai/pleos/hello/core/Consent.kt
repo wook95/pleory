@@ -4,8 +4,11 @@ package ai.pleos.hello.core
 enum class ConsentState { UNSET, GRANTED, DECLINED, WITHDRAWN }
 
 object ConsentPolicy {
-    /** 고지 내용이 바뀌면 올린다. 저장된 버전이 다르면 동의가 없는 것으로 보고 다시 묻는다. */
-    const val VERSION = 1
+    /**
+     * 고지 내용이 바뀌면 올린다. 저장된 버전이 다르면 동의가 없는 것으로 보고 다시 묻는다.
+     * 2: 마이크·위치 목적, Gleo 경로, 수집 목록 고지 추가(PRD v4 F12). 동의는 마이크·위치를 함께 묻는 한 번이다.
+     */
+    const val VERSION = 2
 
     fun effective(state: ConsentState, version: Int): ConsentState =
         if (state == ConsentState.GRANTED && version != VERSION) ConsentState.UNSET else state
