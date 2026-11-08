@@ -123,7 +123,9 @@ class S1CardView(
         page.addView(c.txt(Tok.LABEL_M, Tok.SUB, tnum = true, s = m.date))
         page.addView(c.txt(Tok.HEAD_S, Tok.FG, 700, s = m.title), lp().m(t = c.dp(12)))
         page.addView(c.txt(Tok.BODY_L, Tok.SUB, tnum = true, s = m.sentence), lp().m(t = c.dp(16)))
-        if (m.items.isNotEmpty()) page.addView(c.txt(Tok.BODY_M, Tok.FG, 600, s = moodLine(m.items)), lp().m(t = c.dp(32)))
+        // 감정 흐름은 정리된 항목만. 원문(정리 전·실패)은 감정이 정해지지 않았으므로 "그냥"으로 세지 않는다
+        val felt = m.items.filter { it.type != ItemType.RAW }
+        if (felt.isNotEmpty()) page.addView(c.txt(Tok.BODY_M, Tok.FG, 600, s = moodLine(felt)), lp().m(t = c.dp(32)))
         // 한마디가 없을 때만 빈 카드 문구. 항목을 모두 지운 경우는 한마디(원문)가 남아 아래 목록으로 간다
         if (m.utterances.isEmpty()) {
             page.addView(c.rule(), lp(MATCH_PARENT, c.dp(1)).m(t = c.dp(40)))
@@ -300,13 +302,14 @@ class S1CardView(
                 val (x, y) = pts[near]
                 val r = 16 * d
                 fill.color = Tok.PLATE; c.drawCircle(x, y, r + 5 * d, fill)
-                val moods = CardFormat.pinEmotions(u.items).map(Tok::emotionColor)
+                // 원문뿐인 한마디는 감정이 없으므로 무채색 핀
+                val moods = CardFormat.pinEmotions(u.items.filter { it.type != ItemType.RAW }).map(Tok::emotionColor)
                 val o = RectF(x - r, y - r, x + r, y + r)
                 if (moods.size >= 2) {
                     fill.color = moods[0]; c.drawArc(o, 135f, 180f, true, fill)
                     fill.color = moods[1]; c.drawArc(o, -45f, 180f, true, fill)
                 } else {
-                    fill.color = moods.firstOrNull() ?: Tok.NEUTRAL; c.drawCircle(x, y, r, fill)
+                    fill.color = moods.firstOrNull() ?: Tok.SUB; c.drawCircle(x, y, r, fill)
                 }
                 // 진행 방향의 위쪽 법선으로 시각을 민다(선을 가리지 않게)
                 val a = pts[(near - 1).coerceAtLeast(0)]; val b = pts[(near + 1).coerceAtMost(pts.lastIndex)]
