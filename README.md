@@ -1,21 +1,161 @@
 # Pleory (플레오리)
 
-운전 중 떠오르는 대로 말하면 AI가 정리하고, 차가 시간·장소·주행 맥락을 붙여 통근마다 한 편씩 쌓아주는 Pleos 드라이브 저널.
+## 앱 이름 및 한 줄 소개
 
-## 핵심 흐름
+Pleory(플레오리) — 운전 중 한마디를 카드로 남기는 Pleos Connect 앱.
 
-1. 시동 ON. 화면의 말하기 버튼은 "기록 중" 상태로 대기한다.
-2. 운전 중 버튼을 한 번 누르고 한마디 한다. 앱은 "적어뒀어" 한 문장(TTS)만 답하고 화면은 바뀌지 않는다. 정리는 백그라운드에서 한다.
-3. 목적지에 도착해 기어를 P로 넣으면 '오늘의 나' 카드(소요 시간·거리·한마디 수·항목, 감정 흐름)가 뜬다.
-4. 15초 요약을 음성과 자막으로 재생한다(건너뛰기 가능).
+운전 중 떠오르는 대로 말하면 AI가 할 일·기분·생각으로 정리하고, 차가 시간·장소·주행 맥락을 붙여 통근마다 카드 한 장으로 쌓는다. 주행 중 앱은 먼저 말을 걸지 않고, 카드와 요약은 도착해서 기어를 P로 넣은 뒤에만 나온다.
 
-주행 중 앱은 먼저 말을 걸지 않는다. 카드와 요약은 도착과 기어 P 이후에만 나온다.
+## 주요 기능
+
+| 스토리 | 기능 |
+|---|---|
+| US-01 | 기어 P→D 에서 세션이 저절로 열리고 주행 화면(S0)에 "퇴근길 · 기록 중"이 뜬다 |
+| US-02 | 말하기 버튼 한 번으로 듣기 시작, 다시 누르면 취소 |
+| US-03 | 저장 뒤 TTS "적어뒀어" 한 문장만 답하고 화면은 그대로 둔다 |
+| US-04 | 한 문장에 섞인 할 일과 기분을 LLM 이 나눈다. 실패하거나 8초를 넘기면 원문으로 남긴다 |
+| US-05 | 목적지 도착 + 기어 P 에서 그날 카드(S1): 시간·거리, 감정 흐름, 시각·장소가 붙은 항목 |
+| US-06 | 카드가 뜨면 15초 안의 요약을 음성과 자막으로 읽는다(건너뛰기 있음) |
+| US-07 | 정차 중 카드에서 잘못 들린 항목 지우기 |
+| US-08 | 첫 실행 동의 화면(S3), 설정의 동의 철회와 전체 삭제 |
+| US-09 | Gleo 에게 "플레오리 앱에서 … 적어줘"로 남기기(`ADD_DRIVE_NOTE`) |
+| US-10 | 지난 기록(S2): 최근 7일 세션 목록, "할 일만" 필터, 행을 누르면 그날 카드 |
+| US-11 | 도착 리마인드: 이전 주행에서 말한 미완료 할 일을 한 줄로 읽고 카드 위에 띄운다. "했어"를 누르면 다시 알리지 않는다 |
+| US-12 | "폰에서 열기": 카드 내용을 QR 평문으로 담아 서버 없이 폰으로 옮긴다 |
+
+카드·지난 기록·QR·설정·동의 화면은 기어 P 이고 UX 제한이 없을 때만 열리고, 주행이 시작되면 주행 화면으로 돌아간다.
+
+## 실행 방법
+
+### 1. 에뮬레이터
+
+Pleos Connect 에뮬레이터 이미지(`system-images;android-34;pleos_car_emulator;arm64-v8a`)로 AVD 를 만들고 띄운다.
+
+```bash
+emulator -avd Pleos_Connect_API_34
+adb shell getprop sys.boot_completed   # 1 이면 부팅 완료
+```
+
+### 2. 빌드와 설치
+
+JDK 17 이상(Android Studio 번들 JBR 가능)이 필요하다. 키 설정은 아래 "테스트 환경 및 필요한 설정"을 본다.
+
+```bash
+./gradlew assembleDebug
+adb install -r app/build/outputs/apk/debug/app-debug.apk
+```
+
+release 빌드는 `./gradlew assembleRelease` 로 만든다. `local.properties`에 `release.storeFile`, `release.storePassword`, `release.keyAlias`, `release.keyPassword`가 모두 있으면 그 키스토어로 서명하고, 없으면 심사용으로 debug 서명을 쓴다.
+
+### 3. 권한
+
+`pleos.car.permission.FUSED_LOCATION` 은 런타임 권한이라 앱이 처음 실행될 때 묻는다. 에뮬레이터에서 미리 주려면 다음을 실행한다(앱은 user 10 으로 돈다). `pm grant` 가 예외를 출력해도 `dumpsys package com.pplab.pleory` 에 `granted=true` 가 보이면 부여된 것이다.
+
+```bash
+for p in pleos.car.permission.FUSED_LOCATION android.permission.ACCESS_FINE_LOCATION \
+         android.permission.ACCESS_COARSE_LOCATION android.permission.RECORD_AUDIO; do
+  adb shell pm grant --user 10 com.pplab.pleory $p
+done
+```
+
+나머지 차량 권한은 매니페스트 선언만으로 설치 때 부여된다.
+
+### 4. 실행
+
+```bash
+adb shell am start -n com.pplab.pleory/ai.pleos.hello.MainActivity
+adb logcat -s PleoryFlow:I PleoryPlatform:I
+```
+
+앱 화면은 에뮬레이터 오른쪽 패널(약 1682×1210)에 뜬다. 첫 실행 때 동의 화면이 나오고, 기어를 D 로 바꾸면(에뮬레이터 Virtual Console) 기록이 시작된다.
+
+### 5. 데모 재현
+
+데모 스크립트는 debug 빌드의 디버그 패널과 receiver 를 쓰므로 debug APK 를 설치한 상태에서 돌린다. 시연 영상(이틀 이야기, `docs/pleory/video-script.md`)은 하루에 명령 하나로 전 장면을 재현한다.
+
+```bash
+tools/run-demo.sh v2 reset          # 앱 데이터 초기화 + 권한 + 영상용 지난 기록 5건 (day1 이 알아서 한다)
+REC=1 tools/run-demo.sh v2 day1     # 동의 → 퇴근길 18:40, 한마디 3개 → 카드·요약 → 지우기 → QR → 지난 기록·할 일만 → 시동 OFF (약 2분 20초)
+REC=1 tools/run-demo.sh v2 day2     # 같은 DB 로 다음 날 출근길 08:10 → Gleo 호출 → 회사 도착 → 리마인드 → 했어 (약 2분, 다시 돌려도 된다)
+```
+
+- 배속은 셋째 인자로 준다(기본 30). DemoClock 이 앱 시계를 그만큼 빨리 흘리고, 같은 배속으로 `tools/demo-route.gpx`(2일차는 `demo-route-day2.gpx`)를 에뮬레이터에 재생한다.
+- 결과물은 `apk/video/v2/day1|day2/` 의 `flow.log`(logcat), `rec_start.txt`, `raw.webm`(REC=1 일 때)이다. `SHOTS=<디렉터리>` 를 주면 주요 장면 PNG 도 남긴다.
+- 탭은 디버그 receiver(`DemoReceiver`)가 버튼을 접근성 이름으로 찾아 누르고, 화면 좌표를 `PleoryDemo tap <이름> x= y=` 로 남긴다. 창 크기가 바뀌어도 같은 버튼을 누른다.
+- 시뮬레이션한 부분: 운전자 대사는 텍스트로 넣고(듣는 중은 대사 길이만큼 유지), 한마디 3은 정리를 건너뛰고 원문으로 저장한다. Gleo 호출은 테스트 ASR broadcast 로 넣고, Gleo 가 우리 앱으로 보내지 않으면 `ADD_DRIVE_NOTE` intent 를 직접 넣은 뒤 `gleo simulated` 를 남긴다.
+
+이전 데모(v1, 한마디 2개)는 `tools/run-demo.sh [배속=30] [pcm|text]` 로 돌린다. `pcm` 은 준비한 PCM 을 on-device STT 에 넣고 `text` 는 STT 를 건너뛴다. PCM 준비 방법은 스크립트 상단 주석에 있다.
+
+## 테스트 환경 및 필요한 설정
+
+### 환경
+
+- Pleos Connect 에뮬레이터 v2.1.0, AVD `Pleos_Connect_API_34`(디바이스 `Pleos_Connect_v2_0`, 2560×1440, RAM 4GB)
+- 앱 영역 약 1682×1210, 밀도 160
+- Android API 34(compileSdk·targetSdk 34), minSdk 28
+- 에뮬레이터 차량 서비스: caas 4.2.10, navi 3.0.4, vehicle 2.3.22
+- 빌드: Gradle 9.8.2 wrapper, AGP 9.4.1, JDK 17 이상
+
+### 사용 SDK
+
+| SDK (`ai.pleos.playground`) | 버전 | 용도 |
+|---|---|---|
+| Vehicle | 2.3.2 | 기어(P 감지), 주행 정보 |
+| SpeechToText | 3.3.1 | 한마디 인식 (on-device, ko_KR) |
+| TextToSpeech | 3.3.1 | "적어뒀어", 요약·리마인드 음성 |
+| NaviHelper | 3.0.5 | 목적지, 도착 이벤트 |
+| FusedLocation | 1.1.3 | 위치·속도 (궤적, 도착 반경 판정) |
+
+저장소는 `https://nexus-playground.pleos.ai/repository/maven-releases/` 이다(로그인 불필요). 그 밖에 Anthropic Java SDK(Claude), zxing core(QR), Room + SQLCipher(로컬 DB)를 쓴다. Pleos LLM SDK 는 release 에 넣지 않는다(debug 스파이크 전용).
+
+### 키 설정 (`local.properties`)
+
+루트의 `local.properties`(gitignore 대상)에 아래 이름으로 값을 넣는다. 값은 커밋하지 않는다.
+
+| 키 | 용도 | 없을 때 |
+|---|---|---|
+| `llm.claudeKey` | 1순위 구조화 LLM(Claude `claude-haiku-5-5`) | 셸 `PLEORY_CLAUDE_KEY` 를 읽고, 그것도 없으면 Claude 를 건너뛴다 |
+| `llm.geminiKey` | 2순위 구조화 LLM(Gemini `gemini-2.5-flash`) | 셸 `GEMINI_API_KEY` 를 읽고, 그것도 없으면 Gemini 를 건너뛴다 |
+| `pleos.clientId` | Pleos Playground 앱 등록(debug 스파이크 화면 전용) | 본 기능에는 영향 없음 |
+| `pleos.clientSecret` | 같음 | 같음 |
+
+LLM 키가 하나도 없거나 둘 다 실패하면 한마디는 말한 원문 그대로(RAW) 저장되고, 카드에도 원문 한 줄로 나온다. 인식·응답·카드·요약·지난 기록·QR 은 키 없이도 동작한다. `ANTHROPIC_API_KEY` 는 읽지 않는다. 셸 환경 변수를 쓰려면 그 변수가 있는 셸에서 빌드한다(떠 있는 Gradle 데몬은 `./gradlew --stop` 으로 내린다).
+
+### 권한
+
+| 권한 | 용도 |
+|---|---|
+| `pleos.car.permission.CAR_DRIVE` | 기어 조회 |
+| `pleos.car.permission.CAR_INFO` | 차량 정보 조회 |
+| `pleos.car.permission.NAVI_ROUTE` | 목적지·도착 |
+| `pleos.car.permission.STT_SERVICE` | 음성 인식 |
+| `pleos.car.permission.TTS_SERVICE` | 음성 합성 |
+| `pleos.car.permission.FUSED_LOCATION` | 위치 서비스 (런타임 요청) |
+| `android.permission.RECORD_AUDIO` | 마이크 |
+| `android.permission.ACCESS_FINE_LOCATION`, `ACCESS_COARSE_LOCATION` | 위치 |
+| `android.permission.INTERNET` | 구조화용 LLM 호출 |
+
+Vehicle SDK 가 `ai.pleos.playground.service.vehicle.VEHICLE_BINDING` 을 자동으로 merge 한다. 매니페스트에 `distractionOptimized` 를 선언해 주행 중에도 실행된다.
+
+## APK 파일 위치 또는 GitHub Release 링크
+
+- GitHub Release: https://github.com/wook95/pleory/releases/tag/v0.2
+  - `pleory-film.mp4`: 시연 영상
+  - debug APK: 내부 확인용
+- 제출용 release APK `팀명_Pleory_release.apk` 는 사용량 한도를 건 전용 키로 다시 빌드해 저장소 `apk/` 폴더와 Release 에 올린다(제출 전 추가 예정).
+
+설치는 `adb install -r apk/팀명_Pleory_release.apk` 로 한다. 빌드 시점의 LLM 키가 APK 에 들어가므로 `apk/` 의 다른 빌드 산출물은 git 에 넣지 않는다.
+
+## 시연 영상
+
+1분 51초, 두 테이크(1일차 퇴근길, 2일차 출근길)를 이어 붙였다. 에뮬레이터 화면 녹화이고 운전자 대사는 ElevenLabs 로 만든 음성이다. 파일은 위 Release 의 `pleory-film.mp4` 이고, 편집 소스는 `video/`(Remotion)에 있다.
 
 ## 데이터 원칙
 
 - 음성 원문은 저장하지 않는다. 텍스트만 차량 로컬(Room)에 둔다.
 - 차 밖으로 나가는 데이터는 두 가지뿐이다. LLM 처리용 발화 텍스트, 날씨·주소 조회용 좌표. 식별자는 붙이지 않는다.
-- LLM에는 발화 텍스트만 보낸다. 위치, 주행값, 음성은 보내지 않는다.
+- LLM 에는 발화 텍스트만 보낸다. 위치, 주행값, 음성은 보내지 않는다.
+- QR 은 카드 평문을 그대로 담는다. 서버나 URL 을 거치지 않는다.
 - 캘린더·메신저·SNS 등 외부 서비스와 연동하지 않는다.
 
 ## 개인정보 처리
@@ -27,94 +167,12 @@
 - 앱이 모으는 것: 발화 텍스트, 발화 시각·위치·장소 이름·주행 거리·속도, 주행 경로, 정리된 항목(유형·감정·키워드), 동의 상태와 시각. 동의 화면에 같은 목록을 보여준다.
 - 저장: 기록은 이 차(Room, SQLCipher 암호화)에만 저장하고, 사용자가 지울 때까지 보관한다. DB 비밀번호는 Android Keystore 키로 감싸 둔다. 동의 상태와 시각은 같은 기기의 SharedPreferences에 둔다.
 - 철회와 삭제: 설정(카드 또는 주행 화면의 "설정", 주차 중에만 열림)에서 "동의 철회"를 누르면 그 순간부터 외부 전송이 멈춘다. "전체 삭제"는 확인을 한 번 더 거쳐 모든 기록을 지운다.
-- 문의·신고: 설정 화면의 "문의·신고"에 연락처를 보여준다. **TODO(제출 전, 사람 작업): 지금은 임시 주소 `pleory.team@example.com` 이다. 실제 연락처로 바꾼다(`ui/S3Views.kt` `CONTACT_EMAIL`).**
+- 문의·신고: 설정 화면의 "문의·신고"에 연락처를 보여준다. TODO(제출 전, 사람 작업): 지금은 임시 주소 `pleory.team@example.com` 이다. 실제 연락처로 바꾼다(`ui/S3Views.kt` `CONTACT_EMAIL`).
 - 개인정보처리방침: (URL 미정 — 담당자가 제공하면 여기에 넣는다)
 
-## 사용 SDK와 권한
+## 데모 fixture
 
-| SDK (`ai.pleos.playground`) | 버전 | 용도 |
-|---|---|---|
-| Vehicle | 2.3.2 | 기어(P 감지), 주행 정보 |
-| SpeechToText | 3.3.1 | 한마디 인식 (on-device, ko_KR) |
-| TextToSpeech | 3.3.1 | "적어뒀어", 요약 음성 |
-| NaviHelper | 3.0.5 | 목적지, 도착 이벤트 |
-| FusedLocation | 1.1.3 | 위치·속도 (궤적, 도착 반경 판정) |
-
-LLM SDK는 release에 포함하지 않는다(debug 스파이크 전용).
-
-| 권한 | 용도 |
-|---|---|
-| `pleos.car.permission.CAR_DRIVE` | 기어 조회 |
-| `pleos.car.permission.CAR_INFO` | 차량 정보 조회 |
-| `pleos.car.permission.NAVI_ROUTE` | 목적지·도착 |
-| `pleos.car.permission.STT_SERVICE` | 음성 인식 |
-| `pleos.car.permission.TTS_SERVICE` | 음성 합성 |
-| `pleos.car.permission.FUSED_LOCATION` | 위치 서비스 |
-| `android.permission.RECORD_AUDIO` | 마이크 |
-| `android.permission.ACCESS_FINE_LOCATION`, `ACCESS_COARSE_LOCATION` | 위치 |
-| `android.permission.INTERNET` | 구조화용 LLM 호출 |
-
-Vehicle SDK가 `ai.pleos.playground.service.vehicle.VEHICLE_BINDING`을 자동으로 merge한다. 매니페스트에 `distractionOptimized`를 선언해 주행 중에도 실행된다.
-
-## 테스트 환경
-
-- Pleos Connect 에뮬레이터 v2.1.0 (AVD `Pleos_Connect_API_34`, 2560×1440)
-- 앱 영역 약 1682×1210, 밀도 160
-- Android API 34, minSdk 28
-
-## 빌드와 실행
-
-JDK 17 이상(Android Studio 번들 JBR 가능)이 필요하다. 루트의 `local.properties`(gitignore 대상)에 값을 넣는다.
-
-```properties
-pleos.clientId=<Pleos Playground Client ID>
-pleos.clientSecret=<Pleos Playground Client Secret>
-llm.claudeKey=<Anthropic API key>
-llm.geminiKey=<Gemini API key>
-```
-
-`llm.claudeKey`가 없으면 환경변수 `PLEORY_CLAUDE_KEY`, `llm.geminiKey`가 없으면 `GEMINI_API_KEY`를 쓴다. `ANTHROPIC_API_KEY`는 읽지 않는다. Claude 키가 없으면 Gemini만 쓴다.
-
-```bash
-./gradlew assembleDebug
-adb install -r app/build/outputs/apk/debug/app-debug.apk
-adb shell am start -n com.pplab.pleory/ai.pleos.hello.MainActivity
-adb logcat -s PleoryFlow:I PleoryPlatform:I
-```
-
-release APK는 git에 넣지 않는다(빌드 시 키가 들어가기 때문). 저장소의 Releases에 첨부하며, 받은 파일을 `apk/`에 두고 아래처럼 설치한다.
-
-```bash
-adb install -r apk/pleory-1.0.apk
-```
-
-release 서명은 심사용으로 debug 서명을 쓴다. 자체 키스토어로 서명하려면 `local.properties`에 `release.storeFile`, `release.storePassword`, `release.keyAlias`, `release.keyPassword`를 추가한 뒤 `./gradlew assembleRelease`를 실행한다.
-
-## 데모 재현
-
-데모 스크립트는 debug 빌드의 디버그 패널을 사용하므로 debug APK를 설치한 상태에서 실행한다.
-
-```bash
-tools/run-demo.sh [배속=30] [pcm|text]
-```
-
-- 앱 안의 시나리오를 무장하고, 같은 배속으로 `tools/demo-route.gpx`를 에뮬레이터에 재생한다.
-- 시나리오가 첫 위치 fix를 받는 순간을 18:40으로 삼아 DemoClock이 켜진다. DemoClock은 앱 시계를 배속만큼 빠르게 흘려, 약 51분 퇴근 경로를 짧은 시간에 재생한다. 경로 재생과 앱 시계가 같은 배속이라 어긋나지 않는다.
-- 18:57과 19:08에 한마디가 입력되고, 19:31에 기어 P, 마지막 위치의 300m 반경 판정으로 카드가 뜬다.
-- `pcm`은 준비한 PCM 파일을 on-device STT에 넣고, `text`는 STT를 우회해 텍스트를 인식 결과로 넣는다. PCM 준비 방법은 스크립트 상단 주석을 본다.
-
-영상 v2(이틀 이야기, `docs/pleory/video-script.md`)는 하루에 명령 하나로 전 장면을 재현한다. 텍스트 모드만 쓴다.
-
-```bash
-REC=1 tools/run-demo.sh v2 day1   # 앱 데이터 초기화 → 동의 → 퇴근길 18:40, 한마디 3개 → 카드·요약 → 지우기 → QR → 지난 기록·할 일만 → 시동 OFF (약 2분 20초)
-REC=1 tools/run-demo.sh v2 day2   # 같은 DB 로 다음 날 출근길 08:10 → Gleo 호출 → 회사 도착 → 리마인드 → 했어 (약 2분, 다시 돌려도 된다)
-```
-
-- 산출물은 `apk/video/v2/day1|day2/` 에 `flow.log`(logcat), `rec_start.txt`, `raw.webm`(REC=1). `video/scripts/prepare.sh apk/video/v2/day1` 와 `node video/scripts/timings.mjs apk/video/v2` 가 그대로 읽는다. `SHOTS=<디렉터리>` 면 주요 장면 PNG 도 남긴다.
-- 탭은 좌표 상수가 아니라 디버그 receiver(`DemoReceiver`)가 버튼을 접근성 이름으로 찾아 누르고, 화면 좌표를 `PleoryDemo tap <이름> x= y=` 로 남긴다.
-- 시뮬레이션: 운전자 대사는 텍스트로 넣고(듣는 중은 대사 길이만큼 유지), 한마디 3은 정리를 건너뛰고 원문으로 저장하며, Gleo 호출은 테스트 ASR broadcast 로 넣는다(Gleo 가 우리 앱으로 안 오면 `ADD_DRIVE_NOTE` intent 를 직접 넣고 `gleo simulated` 를 남긴다).
-
-데모 fixture (실서비스 연동 아님):
+실서비스와 연동하지 않은 값이다.
 
 - 날씨: 항상 "비".
 - 장소 라벨: 좌표를 가장 가까운 기준점(반경 1.5km)에 맞춘다.
@@ -126,7 +184,7 @@ REC=1 tools/run-demo.sh v2 day2   # 같은 DB 로 다음 날 출근길 08:10 →
 | (37.5165, 126.9590) | 한강대교 |
 | (37.5400, 126.8400) | 집 |
 
-- 임시 경로: `tools/demo-route.gpx`는 합성 경로다(23km, 51분, 정체 구간 포함). 실제 도로를 따르지 않는다.
+- 경로: `tools/demo-route.gpx`(23km, 51분, 정체 구간 포함)와 그 역방향 `tools/demo-route-day2.gpx` 는 합성 경로라 실제 도로를 따르지 않는다.
 
 ## LLM
 
@@ -136,7 +194,7 @@ REC=1 tools/run-demo.sh v2 day2   # 같은 DB 로 다음 날 출근길 08:10 →
 
 - on-device STT는 인식 오류가 날 수 있다.
 - Odometer는 에뮬레이터에서 0이라 거리는 위치 궤적을 적분해 계산한다.
-- 기록 수정, QR로 폰에서 열기, 나의 지도는 다음 단계다.
+- 기록 수정과 나의 지도는 다음 단계다.
 - 날씨와 장소 라벨은 위 fixture다.
 
 ## 개발자 메모
