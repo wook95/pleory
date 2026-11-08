@@ -1,5 +1,6 @@
 package ai.pleos.hello.ui
 
+import ai.pleos.hello.core.LayoutMode
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
@@ -14,8 +15,8 @@ import android.widget.LinearLayout
 import android.widget.TextView
 
 /**
- * S0 주행 화면(PRD §5, 시안 r1 S0-B). 데이터 바인딩 없음 — 상태 텍스트는 고정이고 버튼만 두 상태(기본/듣는 중).
- * 앱 영역 1682×1210dp(밀도 160 → 1dp = 1px). 바깥 여백 40dp.
+ * S0 주행 화면(PRD §5, 시안 r1 S0-B). 실시간 데이터 바인딩 없음 — 상태 텍스트는 세션 시작 때 정해진 구간 이름이고
+ * 버튼만 두 상태(기본/듣는 중). 바깥 여백 40dp. 말하기 버튼은 창 크기에 비례한다([LayoutMode]).
  */
 class S0DriveView(context: Context, private val onTalk: () -> Unit, onSettings: () -> Unit = {}) : FrameLayout(context) {
 
@@ -23,6 +24,7 @@ class S0DriveView(context: Context, private val onTalk: () -> Unit, onSettings: 
     private val glyph = MicGlyph(context)
     private val label = TextView(context)
     private val settings = TextView(context)
+    private val status = TextView(context)
 
     init {
         setBackgroundColor(BG)
@@ -30,8 +32,8 @@ class S0DriveView(context: Context, private val onTalk: () -> Unit, onSettings: 
             LinearLayout(context).apply {
                 gravity = Gravity.CENTER_VERTICAL
                 addView(View(context).apply { background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(ACCENT) } }, LinearLayout.LayoutParams(dp(14), dp(14)).apply { rightMargin = dp(16) })
-                addView(TextView(context).apply {
-                    text = "퇴근길 · 기록 중"
+                addView(status.apply {
+                    text = "기록 중"
                     textSize = 40f
                     setTextColor(FG)
                     typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
@@ -64,6 +66,20 @@ class S0DriveView(context: Context, private val onTalk: () -> Unit, onSettings: 
         }
         addView(settings, LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.END).apply { setMargins(0, dp(EDGE), dp(EDGE), 0) })
         setListening(false)
+    }
+
+    /** 세션 시작 때 정해진 구간 이름(출근길·퇴근길·외출). 주행 중 값이 바뀌지 않는다. */
+    fun setSegmentName(name: String) {
+        status.text = "$name · 기록 중"
+    }
+
+    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+        val d = resources.displayMetrics.density
+        val wDp = (MeasureSpec.getSize(widthMeasureSpec) / d).toInt()
+        val hDp = (MeasureSpec.getSize(heightMeasureSpec) / d).toInt()
+        button.layoutParams.width = dp(LayoutMode.s0ButtonWidthDp(wDp))
+        button.layoutParams.height = dp(LayoutMode.s0ButtonHeightDp(hDp))
+        super.onMeasure(widthMeasureSpec, heightMeasureSpec)
     }
 
     /** 설정 진입 링크. 주차(P)·제한 없음일 때만 보인다(TRD §8-1 5번). */

@@ -4,6 +4,7 @@ import ai.pleos.hello.core.CardFormat
 import ai.pleos.hello.core.CardItem
 import ai.pleos.hello.core.CardModel
 import ai.pleos.hello.core.GeoPoint
+import ai.pleos.hello.core.LayoutMode
 import ai.pleos.hello.core.TrackMath
 import ai.pleos.hello.data.Emotion
 import android.content.Context
@@ -30,7 +31,9 @@ import android.widget.ScrollView
 import android.widget.TextView
 
 /**
- * S1 카드(PRD §5, 시안 r1 A안 배치). 좌 경로+핀 약 40%, 우 패널 약 60%.
+ * S1 카드(PRD §5, 시안 r1 A안 배치). 창이 넓으면([LayoutMode.WIDE]) 좌 경로+핀 40%, 우 패널 60%의 2열,
+ * 좁으면(분할·portrait) 위 경로 약 30%, 아래 패널의 1열(B안 순서: 제목·통계 → 감정 흐름 → 항목 → 버튼)이다.
+ * 항목 목록만 스크롤한다.
  * 기능 기준 구현이다 — 시각 다듬기는 T8b. [setModel] 로 내용을, [setSummary] 로 요약 자막(재생 중에만)을 바꾼다.
  */
 class S1CardView(
@@ -51,6 +54,20 @@ class S1CardView(
     private val itemsBox = col()
     private val subtitle = text(BODY_S_SP, FG, 500)
     private val skip = button("건너뛰기", false) { onSkip() }
+    private val routeBox = FrameLayout(context).apply {
+        setBackgroundColor(PANEL)
+        addView(route, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
+    }
+    private val panel = col()
+    private val buttons = row().apply { gravity = Gravity.CENTER_VERTICAL }
+    private val buttonViews = listOf(
+        button("15초 요약 듣기", true) { onReplay() },
+        button("수정", false) { onEdit() },
+        button("폰에서 열기", false) { onQr() },
+        button("설정", false) { onSettings() },
+    )
+    private var mode: LayoutMode? = null
+    private var model: CardModel? = null
     private val summaryBar = row().apply {
         gravity = Gravity.CENTER_VERTICAL
         visibility = GONE
@@ -61,35 +78,53 @@ class S1CardView(
     }
 
     init {
-        orientation = HORIZONTAL
         setBackgroundColor(BG)
-        addView(FrameLayout(context).apply {
-            setBackgroundColor(PANEL)
-            addView(route, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
-        }, lp(dp(670), MATCH_PARENT))
-        addView(col().apply {
-            setPadding(dp(56), dp(EDGE), dp(EDGE), dp(EDGE))
+        addView(routeBox)
+        addView(panel)
+        panel.apply {
             addView(dateText)
             addView(titleText, lp().m(t = dp(10)))
             addView(metaText, lp().m(t = dp(10)))
-            addView(stats, lp().m(t = dp(40)))
-            addView(flow, lp().m(t = dp(36)))
+            addView(stats, lp())
+            addView(flow, lp())
             addView(summaryBar, lp().m(t = dp(24)))
             addView(ScrollView(context).apply {
                 isVerticalScrollBarEnabled = false
                 addView(itemsBox)
             }, lp(MATCH_PARENT, 0, 1f).m(t = dp(24)))
-            addView(row().apply {
-                gravity = Gravity.CENTER_VERTICAL
-                addView(button("15초 요약 듣기", true) { onReplay() }, lp(WRAP_CONTENT, WRAP_CONTENT))
-                addView(button("수정", false) { onEdit() }, lp(WRAP_CONTENT, WRAP_CONTENT).m(l = dp(14)))
-                addView(button("폰에서 열기", false) { onQr() }, lp(WRAP_CONTENT, WRAP_CONTENT).m(l = dp(14)))
-                addView(button("설정", false) { onSettings() }, lp(WRAP_CONTENT, WRAP_CONTENT).m(l = dp(14)))
-            }, lp().m(t = dp(24)))
-        }, lp(0, MATCH_PARENT, 1f))
+            addView(buttons, lp().m(t = dp(24)))
+        }
+        applyMode(LayoutMode.WIDE)
+    }
+
+    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+        super.onSizeChanged(w, h, oldw, oldh)
+        val next = LayoutMode.from((w / resources.displayMetrics.density).toInt())
+        if (next != mode) post { applyMode(next) } // 레이아웃 패스 안에서 구조를 바꾸지 않는다
+    }
+
+    /** 폭에 따라 배치만 바꾼다. 내용(model)·요약 자막 상태는 그대로 두고 다시 채운다. */
+    private fun applyMode(next: LayoutMode) {
+        mode = next
+        val wide = next == LayoutMode.WIDE
+        orientation = if (wide) HORIZONTAL else VERTICAL
+        routeBox.layoutParams = if (wide) lp(0, MATCH_PARENT, 4f) else lp(MATCH_PARENT, 0, 3f)
+        panel.layoutParams = if (wide) lp(0, MATCH_PARENT, 6f) else lp(MATCH_PARENT, 0, 7f)
+        panel.setPadding(if (wide) dp(56) else dp(EDGE), dp(EDGE), dp(EDGE), dp(EDGE))
+        stats.layoutParams = lp().m(t = if (wide) dp(40) else dp(24))
+        flow.layoutParams = lp().m(t = if (wide) dp(36) else dp(24))
+        buttons.removeAllViews()
+        buttonViews.forEachIndexed { i, b ->
+            b.setPadding(if (wide) dp(36) else dp(24), 0, if (wide) dp(36) else dp(24), 0)
+            buttons.addView(b, lp(WRAP_CONTENT, WRAP_CONTENT).m(l = if (i == 0) 0 else if (wide) dp(14) else dp(10)))
+        }
+        route.narrow = !wide
+        model?.let(::setModel)
+        requestLayout()
     }
 
     fun setModel(m: CardModel) {
+        model = m
         dateText.text = m.dateLine
         titleText.text = m.title
         metaText.text = m.metaLine
@@ -99,7 +134,7 @@ class S1CardView(
             Triple(Math.round(m.distanceKm).toString(), "km", "주행 거리"),
             Triple(m.utterances.size.toString(), "", "한마디"),
             Triple(m.items.size.toString(), "", "항목"),
-        ).forEachIndexed { i, (v, unit, label) -> stats.addView(stat(v, unit, label), lp(WRAP_CONTENT, WRAP_CONTENT).m(l = if (i == 0) 0 else dp(56))) }
+        ).forEachIndexed { i, (v, unit, label) -> stats.addView(stat(v, unit, label), lp(WRAP_CONTENT, WRAP_CONTENT).m(l = if (i == 0) 0 else if (mode == LayoutMode.NARROW) dp(40) else dp(56))) }
 
         flow.removeAllViews()
         flow.addView(text(LABEL_S_SP, SUB).apply { text = "감정 흐름" }, lp(WRAP_CONTENT, WRAP_CONTENT).m(r = dp(20)))
@@ -186,6 +221,8 @@ class S1CardView(
     private class RouteView(c: Context) : View(c) {
         private val d = resources.displayMetrics.density
         private var model: CardModel? = null
+        var narrow = false
+            set(v) { field = v; invalidate() }
         private val routeP = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.parseColor("#5B6B84"); strokeWidth = 7 * d; style = Paint.Style.STROKE
             strokeCap = Paint.Cap.ROUND; strokeJoin = Paint.Join.ROUND; pathEffect = CornerPathEffect(60 * d)
@@ -249,7 +286,7 @@ class S1CardView(
                 } else {
                     dot.color = colors.firstOrNull() ?: NEUTRAL; c.drawCircle(px, py, r, dot)
                 }
-                val inner = (BUBBLE_W * d - 2 * pad).toInt()
+                val inner = (minOf(BUBBLE_W * d, w * (if (narrow) 0.5f else 0.62f)) - 2 * pad).toInt()
                 val q = layout("\"${u.quote}\"", quoteP, inner)
                 val meta = layout(CardFormat.pinMeta(u), metaP, inner)
                 val textW = (0 until q.lineCount).maxOf { q.getLineWidth(it) }.coerceAtLeast((0 until meta.lineCount).maxOf { meta.getLineWidth(it) })

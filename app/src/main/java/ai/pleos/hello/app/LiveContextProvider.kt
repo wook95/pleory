@@ -29,6 +29,11 @@ class LiveContextProvider(
     private val samples = ArrayList<TrackSample>()
     private var last: LocationFix? = null
 
+    /** S0 상태 텍스트용. 세션이 시작될 때 한 번 정해지고 주행 중 바뀌지 않는다. */
+    @Volatile
+    var sessionSegment: Segment = segment()
+        private set
+
     private val listener: (LocationFix) -> Unit = { fix ->
         val sample = TrackSample(clock.nowMillis(), fix.lat, fix.lng)
         if (track.add(sample)) samples += sample
@@ -43,6 +48,7 @@ class LiveContextProvider(
 
     /** 세션별로 비운다. 마지막으로 안 위치가 있으면 새 세션의 출발점으로 넣는다. */
     override fun onSessionStart() {
+        sessionSegment = segment()
         track = TrackAccumulator()
         samples.clear()
         last?.let {

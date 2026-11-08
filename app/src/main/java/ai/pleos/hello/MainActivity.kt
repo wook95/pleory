@@ -1,5 +1,6 @@
 package ai.pleos.hello
 
+import ai.pleos.hello.core.CardFormat
 import ai.pleos.hello.core.ConsentState
 import ai.pleos.hello.core.Screen
 import ai.pleos.hello.core.ScreenGate
@@ -124,6 +125,7 @@ class MainActivity : Activity() {
         consentView.visibility = if (screen == Screen.CONSENT) View.VISIBLE else View.GONE
         settingsView.visibility = if (screen == Screen.SETTINGS) View.VISIBLE else View.GONE
         view.setListening(state == SessionState.LISTENING)
+        view.setSegmentName(CardFormat.segmentName(app.sessionSegment))
         view.setSettingsVisible(allowed)
         val isCard = screen == Screen.CARD
         if (isCard && !cardShown) loadCard()

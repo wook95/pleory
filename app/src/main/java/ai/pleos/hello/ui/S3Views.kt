@@ -5,6 +5,8 @@ import android.content.Context
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.graphics.text.LineBreakConfig
+import android.os.Build
 import android.view.Gravity
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import android.view.ViewGroup.LayoutParams.WRAP_CONTENT
@@ -37,6 +39,7 @@ private object Kit {
         setTextColor(color)
         typeface = Typeface.create(Typeface.DEFAULT, weight, false)
         includeFontPadding = false
+        if (Build.VERSION.SDK_INT >= 33) lineBreakWordStyle = LineBreakConfig.LINE_BREAK_WORD_STYLE_PHRASE // 좁은 폭에서 한 글자만 남는 줄바꿈 방지
     }
 
     fun button(c: Context, label: String, fill: Int, fg: Int, onClick: () -> Unit) = text(c, BODY_SP, fg, 700).apply {

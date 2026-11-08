@@ -73,6 +73,10 @@ class PleoryApp : Application() {
         private set
     lateinit var consent: ConsentPrefs
         private set
+    private lateinit var liveContext: LiveContextProvider
+
+    /** 이번 세션의 구간(출근길·퇴근길·외출). S0 상태 텍스트가 쓴다. */
+    val sessionSegment: Segment get() = liveContext.sessionSegment
 
     /** 마지막으로 받은 기어. 모르면(OTHER·미수신) null — 화면 게이트는 null 을 닫힘으로 본다. */
     @Volatile
@@ -99,6 +103,7 @@ class PleoryApp : Application() {
     }
 
     private fun assemble() {
+        liveContext = LiveContextProvider(sdkHub.location, clock, sdkHub.navi)
         speechInput = PcmInjectableSpeechInput(sdkHub.speechInput)
         controller = SessionController(
             store = RoomPleoryStore(db),
@@ -108,7 +113,7 @@ class PleoryApp : Application() {
             speechIn = speechInput,
             speechOut = sdkHub.speechOutput,
             outputs = outputs,
-            context = LiveContextProvider(sdkHub.location, clock, sdkHub.navi),
+            context = liveContext,
             clock = clock,
             dispatcher = sdkHub.handler.asCoroutineDispatcher(), // SdkHub 직렬 경로(메인 루퍼)와 같은 스레드
             trace = { Log.i(FLOW_TAG, it) },
