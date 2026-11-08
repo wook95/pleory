@@ -189,3 +189,25 @@ FusedLocation 퍼미션명은 문서에서 확인해 추가한다. MainActivity�
 6. **영상 콘티**: 주행 중 화면이 바뀌지 않는 장면을 어떻게 보여 줄지(Virtual Console 동시 노출, 시계·자막 오버레이). 기어 P와 카드가 뜨는 장면을 한 컷에 담는다.
 7. **profileId 출처**: Pleos 프로필 API 확인 전까지 고정 ID를 쓰고 README에 적는다.
 8. **applicationId** `ai.pleos.hello`는 플랫폼 소유자 네임스페이스처럼 보인다. 제출 전에 바꿀지.
+
+---
+
+## 8. 후속 과제 (P0 완료 후, 2026-11-08)
+
+### 8-1. Pleos 플래닝·심사 가이드 감사에서 나온 것 — 반드시 바꿀 것
+
+1. 앱 안에 개인정보 고지와 명시적 동의 화면(Gemini 전송, 좌표, 로컬 저장, 보유기간, 거부 시 원문만 저장)을 둔다. 동의 철회와 전체 삭제(F12)를 P0으로 올린다. 개인정보처리방침 URL을 준비한다.
+2. `screenOrientation`과 가로·세로(분할) 레이아웃. 카드는 고정 폭 대신 비율로 배치한다.
+3. TTS 오디오 포커스: `AudioAttributes`(USAGE_ASSISTANT) + `GAIN_TRANSIENT_MAY_DUCK`. 거부되면 "적어뒀어"를 생략하고, 포커스를 잃으면 요약을 멈춘다.
+4. 기어 `check*Capabilities` 확인. 내비가 없는 차는 FusedLocation 근접 알림 폴백.
+5. CarUxRestrictions를 카드·설정·QR 진입 조건에 연결한다.
+6. 앱 카테고리: Lifestyle + DO + 주행 중 음성 입력이 허용되는지 주최 측에 확인한다.
+
+바꾸면 좋은 것: CPU·RAM 실측 기록, 카드·세션 상태 복원(F13 앞당기기), 카드 오프라인 표시, 쓰지 않는 `CAR_INFO` 제거, S0 "퇴근길" 하드코딩 수정, 목적지 로그 마스킹.
+원문 근거: 감사 에이전트가 수집한 가이드 텍스트(세션 scratchpad `guide/txt/`).
+
+### 8-2. 코드 리뷰 LOW (데모 범위에서 수용)
+
+- 취소 직후 다시 탭하면 이전 회차의 늦은 Ended/Error가 새 회차로 붙을 수 있다(`platform/Speech.kt`).
+- `SdkHub.initLocation`이 FAILED 뒤 `release()` 없이 `initialize()`를 다시 부른다.
+- final 없이 Ended만 오는 경로(무음)는 15초 타이머로 풀린다. 테스트 1건을 추가할 것.
