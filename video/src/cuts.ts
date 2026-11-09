@@ -83,7 +83,7 @@ export const buildCuts = (t: Timings = timings): Cut[] => {
   const x1 = d.tapXY as Record<string, XY>;
   const x2 = e.tapXY as Record<string, XY>;
   const qrCloseTap = d.qrClose - 0.12; // `tap qr-close` 는 `qr close` 0.12초 전
-  const gleoReply = e.gleoAccepted + 1.55; // Gleo 대답 소리는 accepted 뒤 약 1.9초에 시작한다. 컷 23 은 그 0.4초 앞에서 연다
+  const gleoReply = e.gleoAccepted + 1.55; // Gleo 대답 소리는 accepted 뒤 약 1.9~2.0초에 시작한다(v3 녹화 1.96초). 컷 23 은 accepted + 1.15초, 소리 0.8초 앞에서 연다
   // 2일차 리마인드 TTS 는 긴 글을 합성하느라 로그(remindStart)보다 약 3.5초 늦게 소리가 난다(v3 녹화 109.5초).
   // 카드가 뜬 뒤 조용한 몇 초는 컷 25 로 짧게 보이고, 컷 26 은 소리 직전부터 리마인드 두 문장만 쓴다.
   const remindVoice = e.remindStart + 3.4;
