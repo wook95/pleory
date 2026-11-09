@@ -75,4 +75,8 @@ cd video && npm install && bash scripts/prepare.sh ../apk/video/v3 && npm run re
 - 한마디 요약 문구 "생각이 좀 있었네. 할 일 하나 있어."(감정 없이 할 일 하나뿐인 2일차)는 요약 규칙 그대로다. 어색하면 `core/SummaryComposer` 를 손본다.
 - 대표 문장 LLM 이 프롬프트 규칙을 가끔 어긴다(v3 녹화: 지운 뒤 감정 문장이 마지막 감정 "우울"을 빠뜨림, 첫 감정 문장 36자로 32자 초과). 파서는 길이 48자·빈 문장만 거른다.
 - Release v0.3 의 debug APK 에도 개인 키가 들어 있다. 외부로 넘기지 않는다.
+- 설계 리뷰(v0.3, CLEAR) 뒤 남은 LOW 세 가지:
+  - 대표 문장을 다시 부르지 않는 판단(`digestSignatures`)이 메모리에만 있어, 앱을 다시 켠 뒤 카드를 다시 열면 저장된 LLM 문장을 지우고 다시 부른다(`SessionController.kt` scheduleDigest). 항목 해시를 대표 문장과 함께 저장하면 된다.
+  - `Car.createCar` 가 예외를 던지면 UX 제한이 열린 채로 남는다(`SdkHub.kt`). 화면 게이트가 기어 P 를 따로 요구해 주행 중 노출은 없다.
+  - 차량 서비스 끊김 → 다시 붙음(`markDisconnected` → `attach`) 경로에 단위 테스트가 없다.
 - v0.2 묶음의 커밋: `795992e`(영상 1차) ~ `ad68a0d`(README). v0.3 묶음: `10e9f94`(명세) 부터 `git log 10e9f94~1..main`.
