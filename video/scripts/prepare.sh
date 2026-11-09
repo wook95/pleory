@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # 원본 에뮬레이터 녹화를 Remotion 용 mp4 로 바꾸고, logcat PleoryFlow 시각으로 src/timings.json 을 만든다.
 # 사용: scripts/prepare.sh [take 디렉토리=../apk/video/take2]  (v2: scripts/prepare.sh ../apk/video/v2 -> footage-d1.mp4, footage-d2.mp4)
-#   입력: <take>/raw.webm (2560x1440), <take>/flow.log (logcat -v time, PleoryFlow), <take>/rec_start.txt (HH:MM:SS)
+#   입력: <take>/raw.webm (2560x1440, 부하를 줄이려고 작게 녹화했으면 2560x1440 으로 늘린 뒤 자른다), <take>/flow.log (logcat -v time, PleoryFlow), <take>/rec_start.txt (HH:MM:SS)
 #   출력: public/footage.mp4 (앱 영역 1682x1210 에서 가장자리 테두리 4px 를 뺀 1674x1202, 30fps, H.264/AAC), src/timings.json
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
@@ -17,7 +17,7 @@ transcode() {
   gain="$(awk -v p="${peak:-0}" 'BEGIN { g = -4 - p; if (g < 0) g = 0; printf "%.1f", g }')"
   echo "transcode $raw -> $out (audio +${gain}dB)"
   ffmpeg -hide_banner -loglevel error -nostats -y -i "$raw" \
-    -vf "crop=1674:1202:857:94,fps=30" \
+    -vf "scale=2560:1440:flags=lanczos,crop=1674:1202:857:94,fps=30" \
     -c:v libx264 -preset medium -crf 16 -pix_fmt yuv420p \
     -af "aresample=async=1:first_pts=0,volume=${gain}dB" -c:a aac -b:a 192k -ar 48000 -movflags +faststart \
     "$out"

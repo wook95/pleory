@@ -52,6 +52,13 @@ T0=$SECONDS
 
 if pgrep -f play-route.sh >/dev/null; then echo "다른 경로 재생이 돌고 있다(겹치면 거리가 두 배). 끝난 뒤 다시."; exit 1; fi
 
+# 콜드 부팅(특히 -no-window) 직후 에뮬레이터 시간대가 America/Los_Angeles 로 떴다가, 한국 위치를 받으면 Asia/Seoul 로 바뀐다.
+# 데모 중에 바뀌면 앱 시계(오늘 18:40)가 어긋나므로 먼저 한국 위치를 주고 바뀔 때까지 기다린다(최대 3분).
+for _ in {1..36}; do
+  [[ "$("$ADB" shell getprop persist.sys.timezone | tr -d '\r')" == Asia/Seoul ]] && break
+  "$ADB" emu geo fix 126.9 37.4 >/dev/null; sleep 5
+done
+
 say() { print -r -- "[$(printf '%5.1f' $((SECONDS - T0)))s] $*"; }
 "$ADB" shell setprop debug.pleory.llm_budget_ms "${LLM_BUDGET_MS:-0}"
 demo() { "$ADB" shell am broadcast --user 10 -n "$RECV" "$@" >/dev/null; }
@@ -101,7 +108,8 @@ start_rec() {
   "$ADB" shell date +%H:%M:%S.%N | cut -c1-12 > "$OUT/rec_start.txt"
   if [[ "${REC:-}" == 1 ]]; then
     rm -f "$OUT/raw.webm"
-    "$ADB" emu screenrecord start --time-limit 180 "$OUT/raw.webm" >/dev/null
+    # 호스트 부하가 크면 전체 해상도 녹화(VP8 인코딩)가 에뮬레이터를 멈춰 세운다. REC_SIZE=1920x1080 REC_FPS=20 처럼 줄일 수 있다(prepare.sh 가 2560x1440 으로 늘려 자른다)
+    "$ADB" emu screenrecord start --time-limit 180 ${REC_SIZE:+--size $REC_SIZE} ${REC_FPS:+--fps $REC_FPS} "$OUT/raw.webm" >/dev/null
     say "녹화 시작 $OUT/raw.webm"
   fi
 }
