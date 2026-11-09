@@ -143,6 +143,8 @@ class PleoryApp : Application() {
             trace = { Log.i(FLOW_TAG, it) },
             logError = { msg, t -> Log.e(FLOW_TAG, msg, t) },
             gateAllowed = ::gateAllowed,
+            structureTimeoutMs = llmTotalMs,
+            digestTimeoutMs = llmTotalMs,
             // 카드 대표 문장(TRD §8-11): 같은 Claude → Gemini, 동의가 없으면 부르지 않고 규칙 폴백
             digest = { items -> if (consent.llmAllowed) digestChain().run(items) else null },
         )
@@ -179,7 +181,22 @@ class PleoryApp : Application() {
         }
     }
 
-    private val claude = ClaudeStructurer(timeoutMs = CLAUDE_BUDGET_MS)
+    /**
+     * Claude 한 단계 예산. 디버그 빌드에서만 `adb shell setprop debug.pleory.llm_budget_ms 20000` 으로 늘릴 수 있다 —
+     * 호스트 부하로 에뮬레이터 TLS 가 느려(데우기 6초대) 데모 녹화가 매번 시간 초과로 원문이 될 때 쓴다. 릴리스는 늘 [CLAUDE_BUDGET_MS].
+     */
+    private val claudeBudgetMs: Long by lazy {
+        if (!BuildConfig.DEBUG) return@lazy CLAUDE_BUDGET_MS
+        val v = runCatching {
+            Runtime.getRuntime().exec(arrayOf("getprop", "debug.pleory.llm_budget_ms")).inputStream.bufferedReader().readText().trim().toLongOrNull()
+        }.getOrNull()
+        if (v != null && v > CLAUDE_BUDGET_MS) { Log.i(FLOW_TAG, "llm budget override ${v}ms (debug)"); v } else CLAUDE_BUDGET_MS
+    }
+
+    /** 컨트롤러 상한: Claude 예산 + Gemini 예산 + 여유 0.5초(기본 12초). */
+    private val llmTotalMs: Long get() = claudeBudgetMs + GEMINI_AFTER_CLAUDE_MS + 500
+
+    private val claude by lazy { ClaudeStructurer(timeoutMs = claudeBudgetMs) }
 
     /** 동의가 있으면 Claude 클라이언트·연결을 미리 데운다(요청에 발화 없음). 앱 시작과 동의 직후에 부른다. 여러 번 불러도 한 번만 돈다. */
     fun warmLlm() {
@@ -188,10 +205,10 @@ class PleoryApp : Application() {
 
     /** Claude 키가 있으면 Claude 6.5초 → Gemini 5초, 없으면 Gemini 단독으로 11초(컨트롤러 상한 12초 안). */
     private fun llmChain(): FallbackStructurer {
-        val gemini = GeminiStructurer(budgetMs = if (claude.available) GEMINI_AFTER_CLAUDE_MS else 11_000)
+        val gemini = GeminiStructurer(budgetMs = if (claude.available) GEMINI_AFTER_CLAUDE_MS.toInt() else 11_000)
         return FallbackStructurer(
             listOf(
-                FallbackStructurer.Step("claude", claude, timeoutMs = CLAUDE_BUDGET_MS, available = { claude.available }),
+                FallbackStructurer.Step("claude", claude, timeoutMs = claudeBudgetMs, available = { claude.available }),
                 FallbackStructurer.Step("gemini", gemini),
             ),
             trace = { Log.i(FLOW_TAG, it) },
@@ -199,10 +216,10 @@ class PleoryApp : Application() {
     }
 
     private fun digestChain(): DigestChain {
-        val gemini = GeminiStructurer(budgetMs = if (claude.available) GEMINI_AFTER_CLAUDE_MS else 11_000)
+        val gemini = GeminiStructurer(budgetMs = if (claude.available) GEMINI_AFTER_CLAUDE_MS.toInt() else 11_000)
         return DigestChain(
             listOf(
-                DigestChain.Step("claude", claude, timeoutMs = CLAUDE_BUDGET_MS, available = { claude.available }),
+                DigestChain.Step("claude", claude, timeoutMs = claudeBudgetMs, available = { claude.available }),
                 DigestChain.Step("gemini", gemini),
             ),
             trace = { Log.i(FLOW_TAG, it) },
@@ -365,7 +382,7 @@ class PleoryApp : Application() {
         private const val PARK_HOLD_MS = 5_000L
         // 긴 혼잣말(항목 8개 안팎)은 응답이 길어 4.5초로는 모자랐다(에뮬레이터 실측 2026-11-09). 정리는 뒤에서 돌아 운전자가 기다리지 않는다
         private const val CLAUDE_BUDGET_MS = 6_500L
-        private const val GEMINI_AFTER_CLAUDE_MS = 5_000
+        private const val GEMINI_AFTER_CLAUDE_MS = 5_000L
         val LOCATION_PERMISSIONS = arrayOf(
             Manifest.permission.ACCESS_FINE_LOCATION,
             Manifest.permission.ACCESS_COARSE_LOCATION,

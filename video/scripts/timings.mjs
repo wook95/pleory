@@ -1,7 +1,7 @@
 // flow.log(logcat -v time) + rec_start.txt -> src/timings.json (녹화 시작 기준 초).
 // v1: node timings.mjs [take=../apk/video/take2]           -> 평평한 키(cuts.ts 가 지금 읽는 것)
-// v2: node timings.mjs <day1 take> <day2 take>              -> 평평한 키(1일차 기준, 호환용) + d1·d2 (video-script.md "편집 쪽에 넘길 것")
-//     take 하나만 주고 그 안에 day1/·day2/ 가 있으면(tools/run-demo.sh v2 의 apk/video/v2) 그것을 쓴다.
+// v2·v3: node timings.mjs <day1 take> <day2 take>              -> 평평한 키(1일차 기준, 호환용) + d1·d2 (video-script.md "편집 쪽에 넘길 것")
+//     take 하나만 주고 그 안에 day1/·day2/ 가 있으면(tools/run-demo.sh v3 의 apk/video/v3) 그것을 쓴다.
 // 로그가 없으면 대본의 1차 녹화 기준값을 쓴다.
 import {existsSync, readFileSync, writeFileSync} from 'node:fs';
 import {spawnSync} from 'node:child_process';
@@ -100,23 +100,31 @@ const parseDrive = ({find}, utterances = 2) => {
   return {tap1, ack1, ack1Done, tap2, ack2, ack2Done, tap3, ack3, ack3Done, gearP, cardShown, summaryStart, summaryEnd};
 };
 
+// v3 1일차(혼잣말 한 번): 한마디 키는 tap1·ack1 만 차고, 카드 뒤에 묶음 상세·이번 주행 탭이 있다.
 const parseDay1 = (L) => {
   const drive = parseDrive(L, 3);
+  const cardShown = drive.cardShown ?? -Infinity;
   const qrOpen = L.find(/^qr open /);
   const t = {
     clock0: L.find(/^demo start day=1/),
     consentTap: L.find(/^tap consent x=/),
     ...drive,
+    digestDone: L.find(/^digest (ok|fallback)/, cardShown),
+    groupWorkTap: L.find(/^tap group x=/),
+    tabIdeaTap: L.find(/^tap tab x=/),
     deleteTap: L.find(/^tap delete x=/),
     deleteConfirmTap: L.find(/^tap delete-confirm x=/),
+    backSummaryTap: L.find(/^tap back-summary x=/),
+    tripTap: L.find(/^tap trip x=/),
     qrTap: L.find(/^tap qr x=/),
     qrOpen,
     qrClose: L.find(/^qr close/, qrOpen ?? -Infinity),
     historyTap: L.find(/^tap history x=/),
     todoOnlyTap: L.find(/^tap todo-only x=/),
   };
-  warnMissing('d1', t);
-  t.tapXY = Object.fromEntries(['consent', 'delete', 'delete-confirm', 'qr', 'qr-close', 'history', 'todo-only'].map((n) => [n, L.xy(n)]));
+  const {tap2, ack2, ack2Done, tap3, ack3, ack3Done, ...need} = t; // v3 는 한마디 하나라 2·3 은 비어도 된다
+  warnMissing('d1', need);
+  t.tapXY = Object.fromEntries(['consent', 'group', 'tab', 'delete', 'delete-confirm', 'back-summary', 'trip', 'qr', 'qr-close', 'history', 'todo-only'].map((n) => [n, L.xy(n)]));
   return t;
 };
 

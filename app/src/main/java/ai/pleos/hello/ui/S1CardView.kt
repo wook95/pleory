@@ -316,7 +316,7 @@ class S1CardView(
             }, lp().m(t = c.dp(if (group == ItemGroup.WORK) 18 else 4)))
             val meta = listOfNotNull(gi.time, gi.place, if (it.type == ItemType.RAW) "원문" else null).joinToString(" · ")
             addView(c.txt(Tok.LABEL_S, Tok.SUB, tnum = true, s = meta), lp().m(t = c.dp(8)))
-            if (gi.quote != it.text) addView(c.txt(Tok.LABEL_S, Tok.SUB, s = "“${quote(gi.quote)}”"), lp().m(t = c.dp(4)))
+            if (gi.quote.isNotBlank() && gi.quote != it.text) addView(c.txt(Tok.LABEL_S, Tok.SUB, s = "“${quote(gi.quote)}”"), lp().m(t = c.dp(4)))
         }, lp(0, WRAP_CONTENT, 1f))
         if (id == null) return@apply // 구조화 전 원문 한 줄은 아직 지울 행이 없다
         if (confirmingId == id) {

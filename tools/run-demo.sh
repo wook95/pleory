@@ -21,6 +21,7 @@
 #              OUT=<디렉터리> (기본 apk/video/v2/day1·day2): flow.log(logcat), rec_start.txt(기기 시각), raw.webm
 #              SHOTS=<디렉터리> 이면 주요 장면 스크린샷(PNG)을 남긴다(녹화와 별개, 확인용).
 #              GLEO=b 이면 Gleo 호출 A(실제 Gleo 에 테스트 ASR)를 건너뛰고 B(ADD_DRIVE_NOTE 직접)를 쓴다.
+#              LLM_BUDGET_MS=20000 이면 디버그 앱의 Claude 한 단계 예산을 늘린다(호스트 부하로 에뮬레이터가 느릴 때. 기본 6.5초, 0 이면 기본).
 #   탭은 앱의 디버그 receiver 가 버튼을 접근성 이름으로 찾아 누르고 `PleoryDemo tap <이름> x= y=`(화면 좌표)를 남긴다.
 #   좌표 상수가 없어서 창 크기(1682×1210 등)가 바뀌어도 같은 버튼을 누른다.
 # 로그: adb logcat -s 'PleoryFlow:*' 'PleoryDemo:*'
@@ -52,6 +53,7 @@ T0=$SECONDS
 if pgrep -f play-route.sh >/dev/null; then echo "다른 경로 재생이 돌고 있다(겹치면 거리가 두 배). 끝난 뒤 다시."; exit 1; fi
 
 say() { print -r -- "[$(printf '%5.1f' $((SECONDS - T0)))s] $*"; }
+"$ADB" shell setprop debug.pleory.llm_budget_ms "${LLM_BUDGET_MS:-0}"
 demo() { "$ADB" shell am broadcast --user 10 -n "$RECV" "$@" >/dev/null; }
 tap() { demo --es cmd tap --es target "$@"; }
 # 탭 표지를 기다린다. 버튼을 못 찾았으면(`tap <이름> missing`) 바로 멈춘다.

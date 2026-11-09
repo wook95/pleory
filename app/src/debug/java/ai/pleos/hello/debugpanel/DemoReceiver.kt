@@ -65,6 +65,7 @@ class DemoReceiver : BroadcastReceiver() {
             "tab" -> { d -> d == "$text 보기" }
             "back-summary" -> { d -> d == "요약으로" }
             "trip" -> { d -> d.startsWith("이번 주행") }
+            "row" -> { d -> text != null && d.startsWith(text) && d.endsWith("카드 열기") } // S2 행(접근성 이름 앞부분)
             "check" -> { d -> d.startsWith("‘") && d.endsWith("’ 했어 표시") && text != null && d.contains(text) }
             "qr" -> { d -> d == "폰에서 열기" }
             "qr-close" -> { d -> d == "닫기" }

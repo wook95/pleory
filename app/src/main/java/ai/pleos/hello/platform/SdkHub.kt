@@ -86,12 +86,25 @@ class SdkHub(private val context: Context) {
             Log.w(TAG, "vehicle init failed: $e")
         }
         try {
-            val c = Car.createCar(context)
-            car = c
-            val m = c.getCarManager(Car.CAR_UX_RESTRICTION_SERVICE) as CarUxRestrictionsManager
-            carUx.attach(m)
-            _uxRestrictions.value = SdkState.READY
-            Log.i(TAG, "car ux manager acquired: ${m.currentCarUxRestrictions}")
+            // 수명 주기 리스너를 준다: 없으면 차량 서비스가 다시 뜰 때 Car 가 이 앱 프로세스를 죽인다
+            // (에뮬레이터 부하에서 CarServiceHelper 연결 실패로 차량 서비스가 재시작되며 앱이 함께 죽었다, 2026-11-09).
+            // 서비스가 돌아오면 ready=true 로 다시 불리고 UX 제한 관리자를 새로 붙인다.
+            car = Car.createCar(context, handler, Car.CAR_WAIT_TIMEOUT_DO_NOT_WAIT) { c, ready ->
+                if (ready) {
+                    try {
+                        val m = c.getCarManager(Car.CAR_UX_RESTRICTION_SERVICE) as CarUxRestrictionsManager
+                        carUx.attach(m)
+                        _uxRestrictions.value = SdkState.READY
+                        Log.i(TAG, "car ux manager acquired: ${m.currentCarUxRestrictions}")
+                    } catch (e: Exception) {
+                        _uxRestrictions.value = SdkState.FAILED
+                        Log.w(TAG, "car ux manager failed: $e")
+                    }
+                } else {
+                    carUx.detach()
+                    Log.w(TAG, "car service disconnected; waiting for it to come back")
+                }
+            }
         } catch (e: Exception) {
             _uxRestrictions.value = SdkState.FAILED
             Log.w(TAG, "car ux manager failed: $e")

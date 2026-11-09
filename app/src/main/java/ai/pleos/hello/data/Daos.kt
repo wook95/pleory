@@ -17,7 +17,8 @@ interface SessionDao {
     @Query("UPDATE session SET state = :state WHERE id = :id") suspend fun setState(id: Long, state: SessionState)
     @Query("SELECT id FROM session WHERE endedAt IS NOT NULL AND id != :exclude ORDER BY endedAt DESC LIMIT 1")
     suspend fun latestEnded(exclude: Long): Long?
-    @Query("UPDATE session SET state = :state, endedAt = :endedAt WHERE id = :id")
+    /** 세션 닫기. 도착 카드에서 이미 끝 시각을 적었으면(finishSession) 그대로 둔다 — 시동 OFF 시각으로 덮으면 카드의 도착 시각이 바뀐다. */
+    @Query("UPDATE session SET state = :state, endedAt = COALESCE(endedAt, :endedAt) WHERE id = :id")
     suspend fun close(id: Long, state: SessionState, endedAt: Long)
     @Query("UPDATE session SET headlineEmotion = :emotion, headlineWork = :work, headlineIdea = :idea WHERE id = :id")
     suspend fun setHeadlines(id: Long, emotion: String?, work: String?, idea: String?)

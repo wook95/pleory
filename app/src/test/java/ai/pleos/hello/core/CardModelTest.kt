@@ -148,4 +148,16 @@ class CardModelTest {
         assertEquals(listOf(ItemGroup.EMOTION, ItemGroup.WORK), m.groups.map { it.group })
         assertEquals(true, m.headlinesFallback)
     }
+
+    @Test
+    fun `항목이 셋 이상 나온 긴 혼잣말은 상세 원문 인용을 비운다`() {
+        val ramble = listOf(
+            item("팀장 때문에 힘들었다", ItemType.EMOTION, Emotion.DOWN, 0),
+            item("거래처 서류 다시 보내기", ItemType.TODO, Emotion.NEUTRAL, 1),
+            item("주식 확인", ItemType.THOUGHT, Emotion.NEUTRAL, 2),
+        )
+        val m = CardModelBuilder.build(session, listOf(u2 to ramble), emptyList(), tz)
+        assertEquals(listOf("", "", ""), m.groups.flatMap { g -> g.items.map { it.quote } })
+        assertEquals(u2.text, build(twoItems).groups[1].items.single().quote) // 항목 둘이면 원문을 보인다
+    }
 }

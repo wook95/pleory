@@ -35,7 +35,10 @@ data class CardUtterance(
     val point: GeoPoint?,
 )
 
-/** 묶음 상세의 항목 한 줄. 시각·장소·원문은 그 항목이 나온 한마디의 것. */
+/**
+ * 묶음 상세의 항목 한 줄. 시각·장소·원문은 그 항목이 나온 한마디의 것.
+ * [quote] 는 항목이 셋 이상 나온 긴 혼잣말이면 빈 문자열이다 — 항목마다 같은 혼잣말 앞부분이 되풀이되기만 해서 뜻이 없다.
+ */
 data class CardGroupItem(val item: CardItem, val time: String, val place: String?, val quote: String)
 
 /** 카드 묶음(감정·일·아이디어) 하나: 대표 문장과 항목들(TRD §8-11). 항목이 없는 묶음은 만들지 않는다. */
@@ -145,7 +148,7 @@ object CardModelBuilder {
      * 하나도 없으면 전부 규칙 폴백([CardDigest.fallback]).
      */
     private fun groups(session: Session, cards: List<CardUtterance>): Pair<List<CardGroup>, Boolean> {
-        val flat = cards.flatMap { u -> u.items.map { CardGroupItem(it, u.time, u.place, u.quote) } }
+        val flat = cards.flatMap { u -> u.items.map { CardGroupItem(it, u.time, u.place, if (u.items.size >= LONG_UTTERANCE_ITEMS) "" else u.quote) } }
         if (flat.isEmpty()) return emptyList<CardGroup>() to false
         val stored = Headlines(session.headlineEmotion, session.headlineWork, session.headlineIdea)
         val anyStored = ItemGroup.entries.any { stored[it] != null }
@@ -188,6 +191,9 @@ object CardModelBuilder {
         )
         return if (second.isEmpty()) first else first + "\n" + second.joinToString(", ") + "."
     }
+
+    /** 이 개수 이상 항목이 나온 한마디는 긴 혼잣말로 보고 상세에서 원문 인용을 뺀다. */
+    const val LONG_UTTERANCE_ITEMS = 3
 
     /** 1km 미만은 소수 한 자리(0.4km), 그 이상은 반올림 정수(23km). "0km 달려" 를 막는다. */
     internal fun km(v: Double) = if (v < 1.0) String.format(Locale.KOREA, "%.1f", v) else Math.round(v).toString()
