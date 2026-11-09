@@ -76,14 +76,6 @@ object CardFormat {
         Emotion.UP -> "↑"
     }
 
-    fun typeTag(t: ItemType) = when (t) {
-        ItemType.THOUGHT -> "생각"
-        ItemType.TODO -> "할 일"
-        ItemType.EMOTION -> "감정"
-        ItemType.PERSON -> "사람"
-        ItemType.RAW -> "원문"
-    }
-
     fun segmentName(s: Segment) = when (s) {
         Segment.COMMUTE_OUT -> "퇴근길"
         Segment.COMMUTE_IN -> "출근길"
