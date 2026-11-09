@@ -1,62 +1,83 @@
 {
-  "source": "flow.log (rec_start 23:43:14.883)",
+  "source": "flow.log (rec_start 21:44:18.982)",
   "clockSpeed": 30,
-  "clock0": 6.006,
-  "tap1": 37.11,
-  "ack1": 40.715,
-  "ack1Done": 41.864,
-  "tap2": 54.452,
-  "ack2": 62.755,
-  "ack2Done": 63.939,
-  "gearP": 108.031,
-  "cardShown": 108.033,
-  "summaryStart": 108.111,
-  "summaryEnd": 111.952,
-  "deleteTap": 113.6,
-  "footageDuration": 131.567,
-  "syncShift": 0.001,
+  "clock0": 4.857,
+  "tap1": 38.911,
+  "ack1": 61.614,
+  "ack1Done": 63.12,
+  "tap2": 58.513,
+  "ack2": 61.614,
+  "ack2Done": 63.12,
+  "gearP": 106.932,
+  "cardShown": 106.933,
+  "summaryStart": 106.994,
+  "summaryEnd": 110.966,
+  "deleteTap": 118.446,
+  "footageDuration": 141.9,
+  "syncShift": 0.013,
   "d1": {
-    "clock0": 6.006,
-    "consentTap": 3.676,
-    "tap1": 37.11,
-    "ack1": 40.715,
-    "ack1Done": 41.864,
-    "tap2": 54.452,
-    "ack2": 62.755,
-    "ack2Done": 63.939,
-    "tap3": 85.051,
-    "ack3": 86.753,
-    "ack3Done": 87.883,
-    "gearP": 108.031,
-    "cardShown": 108.033,
-    "summaryStart": 108.111,
-    "summaryEnd": 111.952,
-    "deleteTap": 113.6,
-    "deleteConfirmTap": 115.172,
-    "qrTap": 117.973,
-    "qrOpen": 118.094,
-    "qrClose": 121.89,
-    "historyTap": 123.045,
-    "todoOnlyTap": 125.846,
+    "clock0": 4.857,
+    "consentTap": 3.292,
+    "tap1": 38.911,
+    "ack1": 61.614,
+    "ack1Done": 63.12,
+    "tap2": null,
+    "ack2": 61.614,
+    "ack2Done": 63.12,
+    "tap3": 38.911,
+    "ack3": 61.614,
+    "ack3Done": 63.12,
+    "gearP": 106.932,
+    "cardShown": 106.933,
+    "summaryStart": 106.994,
+    "summaryEnd": 110.966,
+    "digestDone": 108.759,
+    "groupWorkTap": 112.86,
+    "tabIdeaTap": 115.878,
+    "deleteTap": 118.446,
+    "deleteConfirmTap": 120.251,
+    "backSummaryTap": 123.792,
+    "tripTap": 125.091,
+    "qrTap": 127.877,
+    "qrOpen": 128,
+    "qrClose": 131.809,
+    "historyTap": 133.01,
+    "todoOnlyTap": 135.855,
     "tapXY": {
       "consent": {
         "x": 2341,
         "y": 1220
       },
+      "group": {
+        "x": 1341,
+        "y": 600
+      },
+      "tab": {
+        "x": 1937,
+        "y": 198
+      },
       "delete": {
-        "x": 1730,
-        "y": 929
+        "x": 2435,
+        "y": 576
       },
       "delete-confirm": {
-        "x": 1593,
-        "y": 933
+        "x": 2410,
+        "y": 584
+      },
+      "back-summary": {
+        "x": 2382,
+        "y": 198
+      },
+      "trip": {
+        "x": 1341,
+        "y": 904
       },
       "qr": {
         "x": 1313,
         "y": 1216
       },
       "qr-close": {
-        "x": 1825,
+        "x": 1843,
         "y": 785
       },
       "history": {
@@ -70,15 +91,15 @@
     }
   },
   "d2": {
-    "clock0": 1.438,
-    "gleoInject": 41.608,
-    "gleoAccepted": 43.149,
-    "gleoResponse": 43.15,
-    "gearP": 103.499,
-    "cardShown": 103.5,
-    "remindStart": 103.585,
-    "summaryEnd": 110.717,
-    "remindDoneTap": 112.31,
+    "clock0": 1.915,
+    "gleoInject": 42.083,
+    "gleoAccepted": 45.911,
+    "gleoResponse": 45.923,
+    "gearP": 104.019,
+    "cardShown": 104.033,
+    "remindStart": 106.008,
+    "summaryEnd": 123.297,
+    "remindDoneTap": 125.037,
     "gleoSimulated": false,
     "tapXY": {
       "remind-done": {
@@ -86,8 +107,8 @@
         "y": 231
       }
     },
-    "source": "flow.log (rec_start 23:45:32.877)",
-    "syncShift": 0.045,
-    "footageDuration": 115.04
+    "source": "flow.log (rec_start 21:46:51.202)",
+    "syncShift": -0.042,
+    "footageDuration": 127.765
   }
 }

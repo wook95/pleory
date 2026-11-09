@@ -126,7 +126,7 @@ const FootageCut: React.FC<{c: PlacedCut}> = ({c}) => {
   );
 };
 
-// 컷 20: 왼쪽은 QR 모달 정지 프레임(QR 카드 부분), 오른쪽은 폰 틀 안에 QR 을 디코드한 글자 그대로(src/qrText.json)
+// 컷 17: 왼쪽은 QR 모달 정지 프레임(QR 카드 부분), 오른쪽은 폰 틀 안에 QR 을 디코드한 글자 그대로(src/qrText.json)
 const QR_REGION = {x: 0.095, y: 0.19, w: 0.44, h: 0.62}; // 녹화 프레임 비율. 흰 QR 카드(0.12~0.51, 0.23~0.77)만, 오른쪽 모달 글자는 뺀다
 const QrCut: React.FC<{c: PlacedCut}> = ({c}) => {
   const frame = useCurrentFrame();
@@ -150,10 +150,9 @@ const QrCut: React.FC<{c: PlacedCut}> = ({c}) => {
         <div style={{width: 440, height: boxH - 30, borderRadius: 44, border: '2px solid #4A4A4A', background: '#0E0E0E',
           padding: '58px 30px 30px', boxSizing: 'border-box', position: 'relative'}}>
           <div style={{position: 'absolute', top: 22, left: '50%', width: 80, height: 8, marginLeft: -40, borderRadius: 4, background: '#2A2A2A'}} />
-          {lines.map((l, i) => (
-            <div key={i} style={{fontSize: i === 0 ? 24 : 19, fontWeight: i === 0 ? 600 : 400, lineHeight: 1.45,
-              color: i === 0 ? COLOR.text : '#D6D6D6', marginBottom: i === 0 || i === 3 || i === 4 ? 12 : 2,
-              wordBreak: 'keep-all'}}>{l}</div>
+          {lines.map((l, i) => l === '' ? <div key={i} style={{height: 10}} /> : (
+            <div key={i} style={{fontSize: i === 0 ? 22 : 17, fontWeight: i === 0 || /^\[/.test(l) ? 600 : 400, lineHeight: 1.4,
+              color: i === 0 ? COLOR.text : '#D6D6D6', marginBottom: i === 0 ? 8 : 1, wordBreak: 'keep-all'}}>{l}</div>
           ))}
         </div>
       </div>
@@ -255,9 +254,9 @@ const ambienceVolume = (cuts: PlacedCut[]) => {
   const s = FPS;
   const keys: [number, number][] = [
     [0, 0], [0.8 * s, 0.55], [end(1) - 0.5 * s, 0.55], [end(1) + 1 * s, 0.12],
-    [end(12) - 0.5 * s, 0.12], [end(12) + 1 * s, 0],
-    [at(23).from, 0], [at(23).from + 1.2 * s, 0.35], [end(23) + 1 * s, 0.12],
-    [end(27) - 0.5 * s, 0.12], [end(27) + 1 * s, 0],
+    [end(8) - 0.5 * s, 0.12], [end(8) + 1 * s, 0],
+    [at(20).from, 0], [at(20).from + 1.2 * s, 0.35], [end(20) + 1 * s, 0.12],
+    [end(24) - 0.5 * s, 0.12], [end(24) + 1 * s, 0],
   ];
   return (f: number) => interpolate(f, keys.map((k) => k[0]), keys.map((k) => k[1]), clamp);
 };
