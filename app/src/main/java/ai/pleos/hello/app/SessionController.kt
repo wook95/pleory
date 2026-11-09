@@ -105,6 +105,12 @@ class SessionController(
     /** 세션별 진행 중인 대표 문장 작업. 같은 세션을 다시 요청하면 앞의 것을 취소한다. */
     private val digestJobs = mutableMapOf<Long, Job>()
 
+    /** 전체 삭제 중이면 대표 문장을 새로 시작하지 않는다. */
+    private var deleting = false
+
+    /** 지금 세션 id(만들어졌으면). 늦은 커밋이 지난 세션 것인지 가를 때 쓴다. */
+    private var currentSessionId: Long? = null
+
     /** 세션별로 마지막에 대표 문장을 만든 항목 목록. 같으면 다시 부르지 않는다. */
     private val digestSignatures = mutableMapOf<Long, List<DigestItem>>()
 
@@ -280,10 +286,14 @@ class SessionController(
             reminders = emptyList()
             reminderUnspoken = false
             // 대표 문장 LLM 호출을 기다리지 않는다(최대 12초). 취소하면 저장하지 않는다
+            deleting = true
             digestJobs.values.toList().forEach { it.cancel() }
             digestJobs.clear()
+            digestSignatures.clear()
             dbJobs.toList().joinAll()
+            digestJobs.values.toList().forEach { it.cancel() } // 기다리는 사이 지우기로 시작된 것
             store.deleteAll()
+            deleting = false
             sessionDeleted = true
             trace("all data deleted")
             onDone()
@@ -369,7 +379,8 @@ class SessionController(
         sessionId = d
         cardJob = null
         val startedAt = sessionStartedAt
-        launchDb { d.complete(store.createSession(context.profileId(), context.segment(), startedAt)) }
+        currentSessionId = null
+        launchDb { val id = store.createSession(context.profileId(), context.segment(), startedAt); currentSessionId = id; d.complete(id) }
     }
 
     private fun execute(c: SessionCommand) {
@@ -478,7 +489,8 @@ class SessionController(
                 val startedAt = clock.nowMillis()
                 sessionStartedAt = startedAt
                 context.onSessionStart()
-                launchDb { d.complete(store.createSession(context.profileId(), context.segment(), startedAt)) }
+                currentSessionId = null
+                launchDb { val id = store.createSession(context.profileId(), context.segment(), startedAt); currentSessionId = id; d.complete(id) }
             }
             SessionCommand.CloseSession -> {
                 endSummary(stopSpeech = true, notifyDone = false)
@@ -499,7 +511,7 @@ class SessionController(
             // 카드가 떠 있거나(늦게 끝난 정리) 지난 세션의 한마디면(다음 시동의 재처리) 대표 문장을 다시 만든다.
             // 아직 주행 중인 지금 세션은 카드가 뜰 때 만든다
             val sid = store.utterance(entry.dbId.await())?.sessionId
-            val current = if (sessionId.isCompleted) sessionId.getCompleted() else null
+            val current = currentSessionId
             if (sid != null && (machine.state == SessionState.CARD || sid != current)) scheduleDigest(sid)
         }
     }
@@ -511,7 +523,9 @@ class SessionController(
      */
     private fun scheduleDigest(sid: Long) {
         digestJobs.remove(sid)?.cancel()
+        if (deleting) return
         val job = scope.launch {
+            delay(DIGEST_DEBOUNCE_MS) // 시동 때 지난 한마디 여럿이 연달아 커밋되면 마지막 한 번만 부른다
             cardJob?.join()
             itemDeleteJob?.join()
             val card = store.loadCard(sid)
@@ -633,6 +647,7 @@ class SessionController(
 
     private companion object {
         const val SUMMARY_MAX_MS = 15_000L
+        const val DIGEST_DEBOUNCE_MS = 300L
 
         /** 리마인드 한 줄 몫. 첫 할 일을 30자로 잘라 한 줄이 이 안에 끝난다. */
         const val REMIND_EXTRA_MS = 7_000L
