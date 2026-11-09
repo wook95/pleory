@@ -162,8 +162,9 @@ class SessionControllerTest {
         speak(c, TEXT)
         awaitUntil { store.replaceCalls.get() == 1 }
         c.deleteItem(11L) // 두 번째 항목(노을)
-        awaitUntil { store.headlines.size == 2 }
-        assertEquals(listOf(null, Headlines(work = "서류 보내기")), store.headlines.toList())
+        awaitUntil { store.headlines.lastOrNull() == Headlines(work = "서류 보내기") }
+        // 지우기 저장 안에서 먼저 비운다(지운 글이 대표 문장에 남지 않게), 그 뒤 다시 만든 문장
+        assertEquals(null, store.headlines.first())
         assertEquals(listOf(listOf("내일 거래처 서류 다시 보내야 해")), seen.toList())
     }
 
@@ -173,9 +174,9 @@ class SessionControllerTest {
         speak(c, TEXT)
         awaitUntil { store.replaceCalls.get() == 1 }
         c.deleteItem(11L)
-        awaitUntil { store.headlines.isNotEmpty() }
+        awaitUntil { store.headlines.size >= 2 }
         Thread.sleep(100)
-        assertEquals(listOf<Headlines?>(null), store.headlines.toList())
+        assertTrue(store.headlines.all { it == null })
     }
 
     private fun speak(c: SessionController, text: String) {
@@ -197,7 +198,7 @@ class SessionControllerTest {
         val out = CountingOutputs()
         val c = controller(RuleStructurer(), outputs = out)
         c.deleteItem(7L)
-        awaitUntil { out.refreshes.get() == 1 }
+        awaitUntil { out.refreshes.get() >= 1 }
         assertEquals(setOf(7L), store.deletedItems.toSet())
     }
 

@@ -24,11 +24,13 @@ class CarUxRestrictionsSource(private val post: Post) : UxRestrictions {
     override val activeRestrictions: Int get() = if (override == true) DEBUG_ACTIVE else if (override == false) 0 else realActive
 
     fun attach(m: CarUxRestrictionsManager) {
+        detach()
         manager = m
         m.currentCarUxRestrictions?.let {
             realRequired = it.isRequiresDistractionOptimization
             realActive = it.activeRestrictions
         }
+        notifyListeners() // 끊겼던 동안 바뀐 값을 화면 게이트에 알린다
         m.registerListener { r: CarUxRestrictions ->
             val required = r.isRequiresDistractionOptimization
             val active = r.activeRestrictions
@@ -54,6 +56,13 @@ class CarUxRestrictionsSource(private val post: Post) : UxRestrictions {
     fun detach() {
         runCatching { manager?.unregisterListener() }
         manager = null
+    }
+
+    /** 차량 서비스가 끊겼다: 주행 여부를 모르므로 제한 있음으로 본다(닫힌 쪽으로 실패). 다시 붙으면 [attach] 가 실제 값으로 되돌린다. */
+    fun markDisconnected() {
+        detach()
+        realRequired = true
+        notifyListeners()
     }
 
     override fun addListener(l: (Boolean) -> Unit) = listeners.add(l)

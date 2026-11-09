@@ -101,8 +101,8 @@ class SdkHub(private val context: Context) {
                         Log.w(TAG, "car ux manager failed: $e")
                     }
                 } else {
-                    carUx.detach()
-                    Log.w(TAG, "car service disconnected; waiting for it to come back")
+                    carUx.markDisconnected()
+                    Log.w(TAG, "car service disconnected; restrictions assumed until it comes back")
                 }
             }
         } catch (e: Exception) {

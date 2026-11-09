@@ -92,9 +92,12 @@ class SummaryComposerTest {
             SummaryComposer.compose(listOf(SummaryItem(ItemType.THOUGHT, Emotion.DOWN))),
         )
 
-    @Test fun capsAt40Chars() {
-        val items = listOf(emo(Emotion.DOWN), emo(Emotion.UP, "아주 길고 길게 이어지는 한강 노을 풍경"), todo, todo, thought)
-        assertEquals(40, SummaryComposer.compose(items).length)
+    @Test fun over40_dropsCountsInsteadOfCuttingWords() {
+        val long = listOf(emo(Emotion.DOWN), emo(Emotion.UP, "아주 길고 길게 이어지는 한강 노을"), todo, todo, thought)
+        assertEquals("힘들게 시작해서 아주 길고 길게 이어지는 한강 노을로 끝났어.", SummaryComposer.compose(long))
+        val ideasDropped = listOf(emo(Emotion.DOWN), emo(Emotion.UP, "노들섬 한강 노을"), todo, todo, todo, thought, thought, thought, thought)
+        assertEquals("힘들게 시작해서 노들섬 한강 노을로 끝났어. 할 일 셋 있어.", SummaryComposer.compose(ideasDropped))
+        assertTrue(SummaryComposer.compose(ideasDropped).length <= SummaryComposer.MAX_LENGTH)
     }
 
     // 카드 감정 흐름·핀과 같이 원문(RAW, 정리 전·실패) 항목은 감정으로 세지 않는다

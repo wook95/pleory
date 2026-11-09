@@ -44,8 +44,12 @@ object SummaryComposer {
             if (todos > 0) "할 일 ${countWord(todos)}" else null,
             if (ideas > 0 && (todos > 0 || emotions.isNotEmpty())) "아이디어 ${countWord(ideas)}" else null,
         )
-        val full = if (counts.isEmpty()) main else "$main ${counts.joinToString(", ")} 있어."
-        return full.take(MAX_LENGTH)
+        // 넘치면 글자로 자르지 않고 뒤의 개수부터 뺀다(TTS 가 끊긴 낱말을 읽지 않게). 그래도 넘치면 마지막 수단으로 자른다
+        for (k in counts.size downTo 0) {
+            val full = if (k == 0) main else "$main ${counts.take(k).joinToString(", ")} 있어."
+            if (full.length <= MAX_LENGTH) return full
+        }
+        return main.take(MAX_LENGTH)
     }
 
     /** 받침이 없거나 ㄹ 받침이면 "로", 그 외 받침이면 "으로". 한글이 아니면 "로". */

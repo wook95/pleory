@@ -82,6 +82,8 @@ class SessionController(
     /** 카드 대표 문장 체인(TRD §8-11, Claude → Gemini). null 이면 저장하지 않고 화면이 규칙 폴백으로 그린다. 동의 확인은 주입하는 쪽이 한다. */
     private val digest: suspend (List<DigestItem>) -> Headlines? = { null },
     private val digestTimeoutMs: Long = 12_000,
+    /** 대표 문장을 저장하기 직전에 다시 확인하는 동의(호출 중 철회되면 버린다). */
+    private val digestAllowed: () -> Boolean = { true },
 ) {
     private class Entry(val text: String, val dbId: CompletableDeferred<Long>) {
         var generation = 0
@@ -102,6 +104,9 @@ class SessionController(
 
     /** 세션별 진행 중인 대표 문장 작업. 같은 세션을 다시 요청하면 앞의 것을 취소한다. */
     private val digestJobs = mutableMapOf<Long, Job>()
+
+    /** 세션별로 마지막에 대표 문장을 만든 항목 목록. 같으면 다시 부르지 않는다. */
+    private val digestSignatures = mutableMapOf<Long, List<DigestItem>>()
 
     /** 마지막 항목 삭제 쓰기. 요약·카드 읽기가 이 쓰기 뒤에 읽도록 기다린다. */
     private var itemDeleteJob: Job? = null
@@ -274,6 +279,9 @@ class SessionController(
             reminderJob?.cancelAndJoin() // 조회 중인 리마인드가 지운 뒤에 띠를 되살리지 않게
             reminders = emptyList()
             reminderUnspoken = false
+            // 대표 문장 LLM 호출을 기다리지 않는다(최대 12초). 취소하면 저장하지 않는다
+            digestJobs.values.toList().forEach { it.cancel() }
+            digestJobs.clear()
             dbJobs.toList().joinAll()
             store.deleteAll()
             sessionDeleted = true
@@ -292,7 +300,12 @@ class SessionController(
             previous?.join()
             store.deleteItem(itemId)
             trace("item deleted id=$itemId")
-            store.sessionOfItem(itemId)?.let { scheduleDigest(it) }
+            // 지운 항목 글이 대표 문장에 남아 보이지 않게 먼저 비운다(화면은 남은 항목으로 규칙 폴백). LLM 이 실패해도 그대로 폴백이다
+            store.sessionOfItem(itemId)?.let { sid ->
+                store.setHeadlines(sid, null)
+                digestSignatures.remove(sid)
+                scheduleDigest(sid)
+            }
             // 읽는 중인 요약은 지운 항목을 담고 있으므로 멈춘다. 다시 들으면 새로 만든다
             if (summaryText != null) endSummary(stopSpeech = true, notifyDone = true)
             outputs.refreshCard()
@@ -483,29 +496,37 @@ class SessionController(
             store.replaceItems(entry.dbId.await(), items, status)
             trace("committed $status items=${items.size} dbId=${entry.dbId.await()}")
             outputs.refreshCard()
-            // 카드가 이미 떠 있으면 늦게 끝난 정리까지 넣어 대표 문장을 다시 만든다
-            if (machine.state == SessionState.CARD) store.utterance(entry.dbId.await())?.let { scheduleDigest(it.sessionId) }
+            // 카드가 떠 있거나(늦게 끝난 정리) 지난 세션의 한마디면(다음 시동의 재처리) 대표 문장을 다시 만든다.
+            // 아직 주행 중인 지금 세션은 카드가 뜰 때 만든다
+            val sid = store.utterance(entry.dbId.await())?.sessionId
+            val current = if (sessionId.isCompleted) sessionId.getCompleted() else null
+            if (sid != null && (machine.state == SessionState.CARD || sid != current)) scheduleDigest(sid)
         }
     }
 
     /**
-     * [sid] 세션의 대표 문장을 다시 만든다(TRD §8-11). 먼저 저장값을 비워 화면이 지금 항목 기준 규칙 폴백을 그리게 하고,
-     * 체인이 성공하면 저장한 뒤 카드를 다시 읽게 한다. 직렬 경로에서 부른다.
+     * [sid] 세션의 대표 문장을 다시 만든다(TRD §8-11). 항목이 지난번에 만든 때와 같고 저장된 문장이 있으면 건너뛴다(같은 세션에서 카드가 다시 떠도
+     * 문장이 깜빡이지 않게). 바뀌었으면 저장값을 비워 화면이 지금 항목 기준 규칙 폴백을 그리게 하고, 체인이 성공하면 저장한다.
+     * LLM 호출은 저장소 작업([dbJobs])으로 세지 않는다 — 전체 삭제가 최대 12초를 기다리지 않게. 직렬 경로에서 부른다.
      */
     private fun scheduleDigest(sid: Long) {
         digestJobs.remove(sid)?.cancel()
-        val job = launchDb {
+        val job = scope.launch {
             cardJob?.join()
             itemDeleteJob?.join()
-            val items = store.loadCard(sid)?.groups.orEmpty().flatMap { g -> g.items.map { DigestItem(it.item.text, it.item.type, it.item.emotion) } }
+            val card = store.loadCard(sid)
+            val items = card?.groups.orEmpty().flatMap { g -> g.items.map { DigestItem(it.item.text, it.item.type, it.item.emotion) } }
+            if (card != null && !card.headlinesFallback && digestSignatures[sid] == items) return@launch
             store.setHeadlines(sid, null)
-            if (items.isEmpty()) return@launchDb
+            outputs.refreshCard()
+            if (items.isEmpty()) return@launch
             val headlines = withTimeoutOrNull(digestTimeoutMs) { digest(items) }
-            if (headlines == null) {
+            if (headlines == null || !digestAllowed()) {
                 trace("digest fallback: rule")
-                return@launchDb
+                return@launch
             }
             store.setHeadlines(sid, headlines)
+            digestSignatures[sid] = items
             if (BuildConfig.DEBUG) trace("digest saved sid=$sid $headlines")
             outputs.refreshCard()
         }

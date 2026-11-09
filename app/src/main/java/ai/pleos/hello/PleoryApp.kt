@@ -147,6 +147,7 @@ class PleoryApp : Application() {
             digestTimeoutMs = llmTotalMs,
             // 카드 대표 문장(TRD §8-11): 같은 Claude → Gemini, 동의가 없으면 부르지 않고 규칙 폴백
             digest = { items -> if (consent.llmAllowed) digestChain().run(items) else null },
+            digestAllowed = { consent.llmAllowed },
         )
         sdkHub.uxRestrictions.addListener { required ->
             Log.i(FLOW_TAG, "ux required=$required active=${sdkHub.uxRestrictions.activeRestrictions} gate=${gateAllowed()}")

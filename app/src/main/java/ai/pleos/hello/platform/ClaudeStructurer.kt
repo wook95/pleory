@@ -139,7 +139,8 @@ class ClaudeStructurer(
 
     private companion object {
         const val MODEL = "claude-haiku-5-5"
-        const val MAX_TOKENS = 1_024L
+        /** 긴 혼잣말 항목 8~10개(한국어 JSON)는 1024 에 가까워 2048 로(쓰지 않으면 지연 없음). */
+        const val MAX_TOKENS = 2_048L
 
         /** PRD §4-1 응답 모양. 구조화 출력은 객체마다 additionalProperties=false 가 필요하다. */
         val SCHEMA: JsonOutputFormat.Schema = JsonOutputFormat.Schema.builder()

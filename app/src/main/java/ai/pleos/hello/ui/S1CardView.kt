@@ -291,6 +291,7 @@ class S1CardView(
         if (g == openGroup) return
         openGroup = g
         confirmingId = null
+        detailScroll.scrollTo(0, 0)
         trace(if (g == null) "group close" else "group open ${g.name}")
         render()
     }
@@ -345,6 +346,7 @@ class S1CardView(
         model = null
         confirmingId = null
         openGroup = null
+        tripOpen = false
         page.removeAllViews()
         detail.removeAllViews()
         page.addView(context.txt(Tok.BODY_M, Tok.FG, 600, s = "기록을 모두 지웠어요"))
