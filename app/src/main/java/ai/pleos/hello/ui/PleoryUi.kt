@@ -223,3 +223,40 @@ internal class PhoneGlyph(c: Context, ink: Int) : View(c) {
         c.drawLine(w * 0.44f, h * 0.78f, w * 0.56f, h * 0.78f, p)
     }
 }
+
+/** › 또는 ⌄ / ⌃. 묶음 줄 끝과 "이번 주행" 펼침 표시. */
+internal class ChevronGlyph(c: Context, ink: Int, private val down: Boolean = false, private val up: Boolean = false) : View(c) {
+    private val p = Paint(Paint.ANTI_ALIAS_FLAG).also {
+        it.color = ink; it.style = Paint.Style.STROKE; it.strokeCap = Paint.Cap.ROUND; it.strokeJoin = Paint.Join.ROUND
+    }
+    override fun onDraw(c: Canvas) {
+        val w = width.toFloat(); val h = height.toFloat()
+        p.strokeWidth = w * 0.09f
+        val path = Path()
+        when {
+            down -> { path.moveTo(w * 0.22f, h * 0.38f); path.lineTo(w * 0.5f, h * 0.66f); path.lineTo(w * 0.78f, h * 0.38f) }
+            up -> { path.moveTo(w * 0.22f, h * 0.62f); path.lineTo(w * 0.5f, h * 0.34f); path.lineTo(w * 0.78f, h * 0.62f) }
+            else -> { path.moveTo(w * 0.38f, h * 0.2f); path.lineTo(w * 0.66f, h * 0.5f); path.lineTo(w * 0.38f, h * 0.8f) }
+        }
+        c.drawPath(path, p)
+    }
+}
+
+/** 할 일 체크 상자. 끝냈으면 채운 상자에 체크. */
+internal class CheckGlyph(c: Context, private val checked: Boolean) : View(c) {
+    private val p = Paint(Paint.ANTI_ALIAS_FLAG).also { it.strokeCap = Paint.Cap.ROUND; it.strokeJoin = Paint.Join.ROUND }
+    override fun onDraw(c: Canvas) {
+        val w = width.toFloat(); val h = height.toFloat()
+        val box = RectF(w * 0.12f, h * 0.12f, w * 0.88f, h * 0.88f)
+        val r = w * 0.18f
+        if (checked) {
+            p.style = Paint.Style.FILL; p.color = Tok.FG
+            c.drawRoundRect(box, r, r, p)
+            p.style = Paint.Style.STROKE; p.color = Tok.BG; p.strokeWidth = w * 0.11f
+            c.drawPath(Path().apply { moveTo(w * 0.3f, h * 0.52f); lineTo(w * 0.45f, h * 0.67f); lineTo(w * 0.72f, h * 0.36f) }, p)
+        } else {
+            p.style = Paint.Style.STROKE; p.color = Tok.SUB; p.strokeWidth = w * 0.08f
+            c.drawRoundRect(box, r, r, p)
+        }
+    }
+}

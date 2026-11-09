@@ -95,6 +95,8 @@ class MainActivity : Activity() {
             onDeleteItem = { id -> if (app.gateAllowed()) app.controller.deleteItem(id) },
             onHistory = ::openHistory,
             onReminderDone = { id -> if (app.gateAllowed()) app.controller.markReminderDone(id) },
+            onItemDone = { id, done -> if (app.gateAllowed()) app.controller.setItemDone(id, done) },
+            trace = { Log.i("PleoryFlow", it) },
         ).apply { visibility = View.GONE }
         historyView = S2HistoryView(
             this,

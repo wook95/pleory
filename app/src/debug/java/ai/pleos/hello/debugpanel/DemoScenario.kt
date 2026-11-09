@@ -24,7 +24,7 @@ import kotlinx.coroutines.launch
  * 무장(arm) 상태에서 출발점 근처의 첫 위치 fix 가 오면 그 순간을 출발 시각으로 삼아 DemoClock 을 켜고 새 세션을 연다.
  * 그래서 호스트의 경로 재생(tools/play-route.sh)이 시작되는 시점과 앱의 시계가 어긋나지 않는다.
  * - v1: 18:40 출발, 18:57·19:08 에 한마디 2건(듣는 중 0.3초), 19:31 가짜 기어 P.
- * - v2 1일차: v1 + 19:20 한마디 3("음 그 뭐냐", 정리 건너뜀 → 원문). 한마디마다 대사 길이만큼 "듣고 있어요" 를 유지한다.
+ * - v3 1일차: 긴 혼잣말 한 번(TRD §8-11, 영상 대본 v3). 대사 길이만큼 "듣고 있어요" 를 유지하고 19:08 무렵 저장된다.
  * - v2 2일차: 1일차 날짜 + 1일 08:10 출발, 거꾸로 된 경로(집 → 가짜 목적지 "회사"), 08:30 Gleo 호출 신호(호스트가 넣는다), 09:01 기어 P.
  * 도착은 마지막 위치 fix 의 300m 반경 판정이 맡는다.
  */
@@ -34,12 +34,17 @@ object DemoScenario {
 
     private class Line(val text: String, val hour: Int, val minute: Int, val second: Int, val skipLlm: Boolean = false)
 
-    /** 한마디 저장 시각 목표. 표시는 HH:mm 이라 분 안쪽 중간에 맞춘다. 단어는 tools/gen-vo.sh LINES 와 같다. */
+    /** v1 한마디 저장 시각 목표. 표시는 HH:mm 이라 분 안쪽 중간에 맞춘다. */
     private val LINES = listOf(
         Line("오늘 팀장 때문에 진짜 힘들었다", 18, 57, 20),
         Line("내일 거래처 서류 다시 보내야 해 아 노을 예쁘다", 19, 8, 20),
-        Line("음 그 뭐냐", 19, 20, 20, skipLlm = true),
     )
+
+    /** v3 1일차 혼잣말(video-script.md v3 대사 1). 단어는 tools/gen-vo.sh 의 ramble-1 과 같다. */
+    const val RAMBLE = "오늘 팀장 때문에 진짜 힘들었다 아 근데 노들섬 예쁘네 이번 주말에 여기 데이트 한번 올까 " +
+        "아 맞다 내일 거래처 서류 다시 보내야 되고 회의 자료도 만들어야 되네 날씨는 왜 이렇게 흐려 기분까지 우울하다 " +
+        "짬뽕이나 먹어야겠다 요즘 주식은 어떻게 되고 있으려나"
+    private val LINES_V3 = listOf(Line(RAMBLE, 19, 8, 20))
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var job: Job? = null
@@ -104,7 +109,7 @@ object DemoScenario {
             Log.i(TAG, "cue gleo at ${app.clock.nowMillis()}") // 호스트(run-demo.sh)가 이 줄을 보고 Gleo 호출을 넣는다
             waitUntil(app, 9, 1, 0, 0)
         } else {
-            val lines = if (day == 1) LINES else LINES.take(2)
+            val lines = if (day == 1) LINES_V3 else LINES
             lines.forEachIndexed { i, line ->
                 val pcm = if (viaText) null else File(app.filesDir, "u${i + 1}.pcm").readBytes()
                 // 저장 시각이 목표에 닿도록 앞당겨서 시작한다: PCM 은 입력 길이 + 인식 지연 약 0.25초(실측), 텍스트는 듣는 중 유지 시간.

@@ -21,6 +21,8 @@ data class HistoryRow(
     val moods: List<Emotion>,
     val itemCount: Int,
     val todos: List<String>,
+    /** 대표 문장 한 줄(TRD §8-11): 일 → 감정 → 아이디어 중 처음 있는 묶음. 항목이 없으면 null. */
+    val headline: String? = null,
 )
 
 object History {
@@ -72,6 +74,8 @@ object History {
             moods = card.items.filter { it.type != ItemType.RAW }.map { it.emotion },
             itemCount = card.items.size,
             todos = card.items.filter { it.type == ItemType.TODO && !it.done }.map { it.text },
+            headline = listOf(ItemGroup.WORK, ItemGroup.EMOTION, ItemGroup.IDEA)
+                .firstNotNullOfOrNull { g -> card.groups.firstOrNull { it.group == g }?.headline },
         )
     }
 

@@ -11,10 +11,11 @@ data class SummaryItem(
 )
 
 /**
- * PRD §4-2 규칙 요약(LLM 미사용).
+ * PRD §4-2 규칙 요약(LLM 미사용), v3 개정(TRD §8-11).
  * "감정 항목" = type 이 EMOTION 인 항목. 다른 유형의 emotion 값은 요약에 쓰지 않는다
  * (PRD §3: 유형을 비감정으로 바꾸면 emotion 은 NEUTRAL 로). 순서는 입력 순서(발화 시각순 + 발화 내 order).
- * 할 일 수 = type 이 TODO 인 항목 수.
+ * 감정은 처음과 끝만 본다(긴 혼잣말에 감정이 여러 번 나와도 한 문장). 뒤에 묶음 개수를 붙인다:
+ * 할 일 = TODO, 아이디어 = THOUGHT·PERSON(원문 RAW 는 정리 전이라 세지 않는다).
  */
 object SummaryComposer {
     const val MAX_LENGTH = 40
@@ -24,26 +25,27 @@ object SummaryComposer {
     fun compose(items: List<SummaryItem>): String {
         if (items.isEmpty()) return EMPTY
         val emotions = items.filter { it.type == ItemType.EMOTION }
+        val first = emotions.firstOrNull()?.emotion
+        val last = emotions.lastOrNull()?.emotion
         val main = when {
-            emotions.size >= 2 && emotions.first().emotion == Emotion.DOWN && emotions.last().emotion == Emotion.UP -> {
+            emotions.isEmpty() -> "생각이 좀 있었네."
+            emotions.size >= 2 && first == Emotion.DOWN && last == Emotion.UP -> {
                 // 마지막 up 항목의 첫 키워드. 키워드가 없으면 "좋게"로 대체
                 val kw = emotions.last().keywords.firstOrNull { it.isNotBlank() }
                 if (kw != null) "힘들게 시작해서 ${kw}${roParticle(kw)} 끝났어." else "힘들게 시작해서 좋게 끝났어."
             }
-            emotions.size >= 2 -> "감정이 " + emotions.joinToString(", ") { emotionPhrase(it.emotion) } + "."
-            emotions.size == 1 ->
-                if (emotions[0].emotion == Emotion.DOWN) "오늘은 좀 힘들었네." else "오늘은 괜찮았네."
-            else -> "생각이 좀 있었네."
+            emotions.size >= 2 && first == Emotion.UP && last == Emotion.DOWN -> "좋게 시작했는데 좀 가라앉았네."
+            last == Emotion.DOWN -> "오늘은 좀 힘들었네."
+            else -> "오늘은 괜찮았네."
         }
         val todos = items.count { it.type == ItemType.TODO }
-        val full = if (todos > 0) "$main 할 일 ${countWord(todos)} 있어." else main
+        val ideas = items.count { it.type == ItemType.THOUGHT || it.type == ItemType.PERSON }
+        val counts = listOfNotNull(
+            if (todos > 0) "할 일 ${countWord(todos)}" else null,
+            if (ideas > 0 && (todos > 0 || emotions.isNotEmpty())) "아이디어 ${countWord(ideas)}" else null,
+        )
+        val full = if (counts.isEmpty()) main else "$main ${counts.joinToString(", ")} 있어."
         return full.take(MAX_LENGTH)
-    }
-
-    private fun emotionPhrase(e: Emotion) = when (e) {
-        Emotion.DOWN -> "가라앉았다"
-        Emotion.NEUTRAL -> "그냥"
-        Emotion.UP -> "올라왔다"
     }
 
     /** 받침이 없거나 ㄹ 받침이면 "로", 그 외 받침이면 "으로". 한글이 아니면 "로". */

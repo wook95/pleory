@@ -70,7 +70,7 @@ class SessionController(
     private val context: ContextProvider,
     private val clock: Clock,
     dispatcher: CoroutineDispatcher,
-    private val structureTimeoutMs: Long = 8_000,
+    private val structureTimeoutMs: Long = 12_000,
     /** 긴 혼잣말(20초 남짓)도 담게 45초. 종료는 SDK 끝점 검출이 정하고 이건 안전장치다(TRD §8-11). */
     private val sttTimeoutMs: Long = 45_000,
     /** 디버그 로그 훅. 이벤트·명령을 한 줄씩 넘긴다(JVM 테스트에서 android.util.Log 를 피하려고 주입). */
@@ -81,7 +81,7 @@ class SessionController(
     private val gateAllowed: () -> Boolean = { true },
     /** 카드 대표 문장 체인(TRD §8-11, Claude → Gemini). null 이면 저장하지 않고 화면이 규칙 폴백으로 그린다. 동의 확인은 주입하는 쪽이 한다. */
     private val digest: suspend (List<DigestItem>) -> Headlines? = { null },
-    private val digestTimeoutMs: Long = 8_000,
+    private val digestTimeoutMs: Long = 12_000,
 ) {
     private class Entry(val text: String, val dbId: CompletableDeferred<Long>) {
         var generation = 0

@@ -12,10 +12,11 @@ data class QrText(val text: String, val bytes: Int, val items: Int, val dropped:
 }
 
 /**
- * S1 카드를 폰으로 가져갈 QR 평문(TRD §8-9 F10). 서버·URL 없이 글 그대로 넣는다.
- * 줄 순서: 제목("11월 8일 퇴근길 18:40–19:31") → 통계("51분 · 23km") → 카드 문장 → 요약 → 항목("- 18:57 [할 일] …").
- * 지운 항목은 카드 모델에서 이미 빠져 있다. "했어"로 끝낸 할 일도 기록이라 넣고 끝에 "(했어)" 를 붙인다.
- * UTF-8 [MAX_BYTES] 를 넘으면 항목을 뒤에서부터 빼고(제목·통계·문장·요약은 줄이지 않는다) 마지막 줄에 "외 N개" 를 붙인다. 줄 단위로 빼므로 글자 중간에서 자르지 않는다.
+ * S1 카드를 폰으로 가져갈 QR 평문(TRD §8-9 F10, v3 §8-11). 서버·URL 없이 글 그대로 넣는다. 카드와 같은 모양이다:
+ * 제목("11월 8일 퇴근길 18:40–19:31") → 묶음별 대표 문장("감정: …") → 묶음별 항목("[일]" 아래 "- [ ] …", 감정은 "- ↓ …")
+ * → 이번 주행 한 줄. 지운 항목은 카드 모델에서 이미 빠져 있다. 끝낸 할 일은 "- [x]".
+ * UTF-8 [MAX_BYTES] 를 넘으면 항목을 뒤에서부터 빼고(제목·대표 문장·이번 주행은 줄이지 않는다) "외 N개" 를 붙인다.
+ * 줄 단위로 빼므로 글자 중간에서 자르지 않고, 항목이 다 빠진 묶음은 머리도 뺀다.
  */
 object QrPayload {
     /**
@@ -40,19 +41,22 @@ object QrPayload {
     )
 
     fun build(m: CardModel, maxBytes: Int = MAX_BYTES): QrText {
-        val head = listOfNotNull(
-            m.heading,
-            "${m.durationMin}분 · ${CardModelBuilder.km(m.distanceKm)}km",
-            m.sentence,
-            m.summary,
-        )
-        val lines = m.utterances.flatMap { u -> u.items.map { "- ${u.time} [${CardFormat.typeTag(it.type)}] ${it.text}" + if (it.done) " (했어)" else "" } }
+        val head = listOf(m.heading) + m.groups.map { "${it.group.label}: ${it.headline}" }
+        val trip = "이번 주행: ${m.startLabel} → ${m.endLabel} · ${m.durationMin}분 · ${CardModelBuilder.km(m.distanceKm)}km"
+        val lines = m.groups.flatMap { g -> g.items.map { g.group to line(g.group, it.item) } }
         for (k in lines.size downTo 0) {
             val dropped = lines.size - k
-            val text = (head + lines.take(k) + listOfNotNull(if (dropped > 0) "외 ${dropped}개" else null)).joinToString("\n")
+            val sections = lines.take(k).groupBy({ it.first }, { it.second }).flatMap { (g, ls) -> listOf("", "[${g.label}]") + ls }
+            val text = (head + sections + listOfNotNull(if (dropped > 0) "외 ${dropped}개" else null) + "" + trip).joinToString("\n")
             val bytes = text.toByteArray(Charsets.UTF_8).size
             if (bytes <= maxBytes || k == 0) return QrText(text, bytes, k, dropped)
         }
         error("unreachable")
+    }
+
+    private fun line(g: ItemGroup, it: CardItem) = when (g) {
+        ItemGroup.WORK -> "- [${if (it.done) "x" else " "}] ${it.text}"
+        ItemGroup.EMOTION -> "- ${CardFormat.emotionGlyph(it.emotion)} ${it.text}"
+        ItemGroup.IDEA -> "- ${it.text}" + if (it.type == ai.pleos.hello.data.ItemType.RAW) " (원문)" else ""
     }
 }

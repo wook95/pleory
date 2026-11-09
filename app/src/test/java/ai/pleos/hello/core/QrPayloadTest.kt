@@ -38,43 +38,38 @@ class QrPayloadTest {
     private fun card(vararg pairs: Pair<Utterance, List<Item>>, s: Session = session) = CardModelBuilder.build(s, pairs.toList(), emptyList(), tz)
 
     @Test
-    fun `평문 - 제목 통계 문장 요약 항목 순`() {
+    fun `평문 - 제목 대표 문장 묶음별 항목 이번 주행 순`() {
         val m = card(
             utt(1, 17) to listOf(item(1, 1, "내일 거래처 서류 다시 보내기", ItemType.TODO)),
-            utt(2, 30) to listOf(item(2, 2, "팀장님 말이 계속 걸린다", ItemType.THOUGHT)),
+            utt(2, 30) to listOf(item(2, 2, "팀장님 말이 계속 걸린다", ItemType.THOUGHT), item(3, 2, "회의 자료 만들기", ItemType.TODO, order = 1, done = true)),
+            s = session.copy(headlineWork = "서류 보내고 회의 자료 만들기", headlineIdea = "팀장님 말"),
         )
         val p = QrPayload.build(m)
         val expected = listOf(
             "11월 8일 퇴근길 18:40–19:31",
-            "51분 · 23km",
-            "18:40 회사에서 출발해 23km 달려 19:31 집에 도착했어요.",
-            "할 일 하나, 생각 하나 남겼어요.",
-            "- 18:57 [할 일] 내일 거래처 서류 다시 보내기",
-            "- 19:10 [생각] 팀장님 말이 계속 걸린다",
+            "일: 서류 보내고 회의 자료 만들기",
+            "아이디어: 팀장님 말",
+            "",
+            "[일]",
+            "- [ ] 내일 거래처 서류 다시 보내기",
+            "- [x] 회의 자료 만들기",
+            "",
+            "[아이디어]",
+            "- 팀장님 말이 계속 걸린다",
+            "",
+            "이번 주행: 18:40 회사 → 19:31 집 · 51분 · 23km",
         ).joinToString("\n")
         assertEquals(expected, p.text)
         assertEquals(expected.toByteArray(Charsets.UTF_8).size, p.bytes)
-        assertEquals(2, p.items)
+        assertEquals(3, p.items)
         assertFalse(p.truncated)
     }
 
     @Test
-    fun `요약이 없으면 줄을 빼고 정리 전 한마디는 원문으로 들어간다`() {
-        val p = QrPayload.build(card(utt(1, 5, "비 오는데 우산 챙길걸") to emptyList(), s = session.copy(summaryText = null)))
-        assertEquals(
-            listOf("11월 8일 퇴근길 18:40–19:31", "51분 · 23km", "18:40 회사에서 출발해 23km 달려 19:31 집에 도착했어요.", "- 18:45 [원문] 비 오는데 우산 챙길걸").joinToString("\n"),
-            p.text,
-        )
-    }
-
-    @Test
-    fun `지운 항목은 빠지고 했어로 끝낸 할 일은 표시를 달고 남는다`() {
-        val p = QrPayload.build(card(utt(1, 17) to listOf(
-            item(1, 1, "지운 생각", ItemType.THOUGHT, order = 0, deleted = true),
-            item(2, 1, "서류 보내기", ItemType.TODO, order = 1, done = true),
-        )))
+    fun `정리 전 한마디는 원문 표시로 아이디어에 들어가고 지운 항목은 빠진다`() {
+        val p = QrPayload.build(card(utt(1, 5, "비 오는데 우산 챙길걸") to emptyList(), utt(2, 17) to listOf(item(1, 2, "지운 생각", ItemType.THOUGHT, deleted = true))))
+        assertTrue(p.text.contains("[아이디어]\n- 비 오는데 우산 챙길걸 (원문)"))
         assertFalse(p.text.contains("지운 생각"))
-        assertTrue(p.text.endsWith("- 18:57 [할 일] 서류 보내기 (했어)"))
         assertEquals(1, p.items)
     }
 
@@ -89,15 +84,14 @@ class QrPayloadTest {
         assertTrue(p.truncated)
         assertEquals(40, p.items + p.dropped)
         val lines = p.text.lines()
-        assertEquals("외 ${p.dropped}개", lines.last())
-        // 앞쪽 항목이 남고 마지막으로 남은 항목은 온전한 한 줄이다
-        assertTrue(lines.contains("- 18:41 [할 일] 긴 할 일 항목 번호 1 다시 확인하기"))
-        assertEquals("- ${CardFormat.time(t0 + p.items * min, tz)} [할 일] 긴 할 일 항목 번호 ${p.items} 다시 확인하기", lines[lines.size - 2])
-        // 한 개를 더 넣으면 상한을 넘는다 = 넣을 수 있는 만큼 넣었다
-        val fullLines = full.text.lines()
-        val head = fullLines.size - 40
-        val oneMore = (fullLines.take(head + p.items + 1) + "외 ${p.dropped - 1}개").joinToString("\n")
-        assertTrue(oneMore.toByteArray(Charsets.UTF_8).size > QrPayload.MAX_BYTES)
+        // 이번 주행은 줄이지 않고 맨 끝, 그 앞에 빈 줄과 "외 N개"
+        assertTrue(lines.last().startsWith("이번 주행: "))
+        assertEquals("외 ${p.dropped}개", lines[lines.size - 3])
+        assertTrue(lines.contains("- [ ] 긴 할 일 항목 번호 1 다시 확인하기"))
+        assertEquals("- [ ] 긴 할 일 항목 번호 ${p.items} 다시 확인하기", lines[lines.size - 4])
+        // 한 개를 더 넣으면 상한을 넘는다 = 넣을 수 있는 만큼 넣었다("외 N개" 자릿수가 줄어 1바이트 줄 수 있다)
+        val next = "\n- [ ] 긴 할 일 항목 번호 ${p.items + 1} 다시 확인하기".toByteArray(Charsets.UTF_8).size
+        assertTrue(p.bytes + next - 1 > QrPayload.MAX_BYTES)
     }
 
     @Test

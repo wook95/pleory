@@ -159,4 +159,21 @@ class HistoryTest {
         val s = session(1, today0 + min).copy(distanceKm = 0.43, durationMin = 3)
         assertEquals("3분 · 0.4km", History.rows(listOf(s), emptyList(), emptyList(), now, tz = tz).single().stats)
     }
+
+    @Test
+    fun `행 대표 문장은 일 먼저 없으면 감정 저장된 문장이 있으면 그것`() {
+        val s1 = session(1, today0 + 8 * 60 * min)
+        val s2 = session(2, today0 + 18 * 60 * min).copy(headlineWork = "서류와 회의 자료")
+        val rows = History.rows(
+            listOf(s1, s2),
+            listOf(utt(1, 1, s1.startedAt + min), utt(2, 2, s2.startedAt + min)),
+            listOf(
+                item(1, 1, ItemType.EMOTION, Emotion.DOWN, text = "커피 쏟아서 짜증"),
+                item(2, 2, ItemType.TODO, text = "거래처 서류 다시 보내기"),
+                item(3, 2, ItemType.TODO, order = 1, text = "회의 자료 만들기"),
+            ),
+            now, tz = tz,
+        )
+        assertEquals(listOf("서류와 회의 자료", "커피 쏟아서 짜증"), rows.map { it.headline })
+    }
 }

@@ -58,8 +58,14 @@ class DemoReceiver : BroadcastReceiver() {
     private fun tap(target: String, text: String?) {
         val match: (String) -> Boolean = when (target) {
             "consent" -> { d -> d == "동의" }
-            "delete" -> { d -> d == "‘$text’ 지울지 묻기" }
-            "delete-confirm" -> { d -> d == "‘$text’ 지우기" }
+            // text 는 항목 글의 일부(예: "짬뽕"). LLM 이 낸 글이 매번 조금씩 달라서 낱말로 찾는다
+            "delete" -> { d -> d.startsWith("‘") && d.endsWith("’ 지울지 묻기") && text != null && d.contains(text) }
+            "delete-confirm" -> { d -> d.startsWith("‘") && d.endsWith("’ 지우기") && text != null && d.contains(text) }
+            "group" -> { d -> d == "$text 자세히" }
+            "tab" -> { d -> d == "$text 보기" }
+            "back-summary" -> { d -> d == "요약으로" }
+            "trip" -> { d -> d.startsWith("이번 주행") }
+            "check" -> { d -> d.startsWith("‘") && d.endsWith("’ 했어 표시") && text != null && d.contains(text) }
             "qr" -> { d -> d == "폰에서 열기" }
             "qr-close" -> { d -> d == "닫기" }
             "history" -> { d -> d == "지난 기록" }
@@ -115,11 +121,12 @@ class DemoReceiver : BroadcastReceiver() {
 class DemoTracker : ContentProvider() {
     override fun onCreate(): Boolean {
         (context?.applicationContext as? Application)?.registerActivityLifecycleCallbacks(object : Application.ActivityLifecycleCallbacks {
+            // 보이는 동안(started~stopped)을 쓴다. 콜드 부팅 직후 시스템 창이 초점을 가져가면 Activity 가 보이면서도 paused 라 resumed 로는 놓친다
             override fun onActivityResumed(activity: Activity) { resumed = activity }
-            override fun onActivityPaused(activity: Activity) { if (resumed === activity) resumed = null }
+            override fun onActivityPaused(activity: Activity) = Unit
             override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) = Unit
-            override fun onActivityStarted(activity: Activity) = Unit
-            override fun onActivityStopped(activity: Activity) = Unit
+            override fun onActivityStarted(activity: Activity) { resumed = activity }
+            override fun onActivityStopped(activity: Activity) { if (resumed === activity) resumed = null }
             override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) = Unit
             override fun onActivityDestroyed(activity: Activity) = Unit
         })

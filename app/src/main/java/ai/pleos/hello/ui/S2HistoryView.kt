@@ -105,6 +105,8 @@ class S2HistoryView(
                 addView(c.txt(Tok.BODY_L, Tok.FG, 700, s = r.segment), lp(0, WRAP_CONTENT, 1f))
                 addView(c.txt(Tok.BODY_S, Tok.SUB, tnum = true, s = r.stats), lp(WRAP_CONTENT).m(l = c.dp(16)))
             }, lp().m(t = c.dp(8)))
+            // 대표 문장 한 줄(TRD §8-11): 그 주행에서 말한 걸 날짜보다 먼저 알아보게
+            if (!todoOnly) r.headline?.let { addView(c.txt(Tok.BODY_S, Tok.FG, 500, s = it).apply { maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END }, lp().m(t = c.dp(10))) }
             addView(MoodBar(c, r.moods), lp(MATCH_PARENT, c.dp(12)).m(t = c.dp(20)))
             addView(c.row().apply {
                 addView(c.txt(Tok.LABEL_M, Tok.SUB, s = moodWords(r.moods)), lp(0, WRAP_CONTENT, 1f))
@@ -117,7 +119,7 @@ class S2HistoryView(
                     addView(c.txt(Tok.BODY_S, Tok.FG, 500, s = todo), lp(0, WRAP_CONTENT, 1f))
                 }, lp().m(t = c.dp(14)))
             }
-            contentDescription = "${r.day} ${r.segment} ${r.timeRange}, ${r.stats}, 항목 ${r.itemCount}개. 카드 열기"
+            contentDescription = "${r.day} ${r.segment} ${r.timeRange}, ${r.stats}, 항목 ${r.itemCount}개${r.headline?.let { ", $it" }.orEmpty()}. 카드 열기"
             setOnClickListener { onOpen(r.sessionId) }
             pressScale()
         }, lp())

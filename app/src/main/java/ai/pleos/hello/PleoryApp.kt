@@ -130,7 +130,7 @@ class PleoryApp : Application() {
         speechInput = PcmInjectableSpeechInput(sdkHub.speechInput)
         controller = SessionController(
             store = RoomPleoryStore(db),
-            // 공모전은 Claude(claude-haiku-5-5) → 실패하면 Gemini → 그래도 실패하면 RAW, 전부 컨트롤러 8초 안(TRD D6).
+            // 공모전은 Claude(claude-haiku-5-5) → 실패하면 Gemini → 그래도 실패하면 RAW, 전부 컨트롤러 12초 안(TRD D6, §8-11).
             // 플랫폼 LLM(Gleo AI)이 서드파티에 열리면 PleosLlmStructurer로 전환
             // 동의가 없거나 철회됐으면 외부 LLM 을 부르지 않고 RAW 로 남긴다(TRD §8-1 1번)
             structurer = DemoSkippableStructurer(ConsentGatedStructurer({ consent.llmAllowed }, llmChain(), { Log.i(FLOW_TAG, it) })),
@@ -186,9 +186,9 @@ class PleoryApp : Application() {
         if (consent.llmAllowed) claude.warmUp(appScope) { Log.i(FLOW_TAG, it) }
     }
 
-    /** Claude 키가 있으면 Claude 4.5초 → Gemini 나머지(약 3.4초), 없으면 Gemini 단독으로 8초. */
+    /** Claude 키가 있으면 Claude 6.5초 → Gemini 5초, 없으면 Gemini 단독으로 11초(컨트롤러 상한 12초 안). */
     private fun llmChain(): FallbackStructurer {
-        val gemini = GeminiStructurer(budgetMs = if (claude.available) GEMINI_AFTER_CLAUDE_MS else 8_000)
+        val gemini = GeminiStructurer(budgetMs = if (claude.available) GEMINI_AFTER_CLAUDE_MS else 11_000)
         return FallbackStructurer(
             listOf(
                 FallbackStructurer.Step("claude", claude, timeoutMs = CLAUDE_BUDGET_MS, available = { claude.available }),
@@ -199,7 +199,7 @@ class PleoryApp : Application() {
     }
 
     private fun digestChain(): DigestChain {
-        val gemini = GeminiStructurer(budgetMs = if (claude.available) GEMINI_AFTER_CLAUDE_MS else 8_000)
+        val gemini = GeminiStructurer(budgetMs = if (claude.available) GEMINI_AFTER_CLAUDE_MS else 11_000)
         return DigestChain(
             listOf(
                 DigestChain.Step("claude", claude, timeoutMs = CLAUDE_BUDGET_MS, available = { claude.available }),
@@ -363,8 +363,9 @@ class PleoryApp : Application() {
         const val FLOW_TAG = "PleoryFlow"
         private const val ARRIVAL_RADIUS_M = 300.0
         private const val PARK_HOLD_MS = 5_000L
-        private const val CLAUDE_BUDGET_MS = 4_500L
-        private const val GEMINI_AFTER_CLAUDE_MS = 3_400
+        // 긴 혼잣말(항목 8개 안팎)은 응답이 길어 4.5초로는 모자랐다(에뮬레이터 실측 2026-11-09). 정리는 뒤에서 돌아 운전자가 기다리지 않는다
+        private const val CLAUDE_BUDGET_MS = 6_500L
+        private const val GEMINI_AFTER_CLAUDE_MS = 5_000
         val LOCATION_PERMISSIONS = arrayOf(
             Manifest.permission.ACCESS_FINE_LOCATION,
             Manifest.permission.ACCESS_COARSE_LOCATION,

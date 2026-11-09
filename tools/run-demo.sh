@@ -9,7 +9,10 @@
 #   adb push u1.pcm /data/local/tmp/u1.pcm; adb push u2.pcm /data/local/tmp/u2.pcm
 #   adb shell run-as com.pplab.pleory --user 10 cp /data/local/tmp/u1.pcm files/u1.pcm   (u2 도 동일)
 #
-# v2 사용 (텍스트 모드만):
+# v3 사용: tools/run-demo.sh v3 reset|day1|day2 [배속=30]  (TRD §8-11, 영상 대본 v3)
+#   day1 은 긴 혼잣말 한 번 → 카드(감정/일/아이디어 대표 문장) → 일 상세 → 아이디어 상세 → 짬뽕 지우기 → 요약으로 → 이번 주행 펼침 → QR → 지난 기록·할 일만.
+#   day2 는 v2 와 같다. 산출물은 apk/video/v3/<단계>.
+# v2 사용 (텍스트 모드만, v2 1일차 장면은 v3 에서 없어졌다 — day1 은 v3 흐름으로 돈다):
 #   tools/run-demo.sh v2 reset           앱 데이터 초기화(동의 화면이 다시 뜬다) + 권한 + 영상 시드 5건. day1 이 먼저 알아서 한다.
 #   tools/run-demo.sh v2 day1 [배속=30]  초기화 → 동의 탭 → 퇴근길 18:40, 한마디 1~3, 기어 P → 카드·요약 → 지우기 → QR → 지난 기록·할 일만 → 시동 OFF
 #   tools/run-demo.sh v2 day2 [배속=30]  같은 DB 로 다음 날 출근길 08:10(거꾸로 된 경로, 목적지 "회사") → Gleo 호출 → 기어 P → 리마인드 → 했어
@@ -28,7 +31,7 @@ ROOT="${HERE:h}"
 PKG=com.pplab.pleory
 RECV="$PKG/ai.pleos.hello.debugpanel.DemoReceiver"
 
-if [[ "${1:-}" != v2 ]]; then
+if [[ "${1:-}" != v2 && "${1:-}" != v3 ]]; then
   SPEED="${1:-30}"
   MODE="${2:-pcm}"
   # 이전 실행이 남긴 마지막 위치(에뮬레이터가 계속 반복 송출)를 출발점에서 먼 곳으로 치워 둔다.
@@ -39,9 +42,10 @@ if [[ "${1:-}" != v2 ]]; then
   exit 0
 fi
 
-STEP="${2:?v2 reset|day1|day2}"
+VER="$1"
+STEP="${2:?v3 reset|day1|day2}"
 SPEED="${3:-30}"
-OUT="${OUT:-$ROOT/apk/video/v2/$STEP}"
+OUT="${OUT:-$ROOT/apk/video/$VER/$STEP}"
 LOG="$OUT/flow.log"
 T0=$SECONDS
 
@@ -102,15 +106,24 @@ start_rec() {
 
 stop_rec() { [[ "${REC:-}" == 1 ]] && "$ADB" emu screenrecord stop >/dev/null && say "녹화 멈춤"; true; }
 
-# 대사 mp3 길이 + 0.1초(없으면 대본 기본값)
+# 혼잣말 mp3 길이 + 0.1초(없으면 대본 기본값 21초)
 holds() {
-  local d=(3.6 8.4 2.2) out=()
-  for n in 1 2 3; do
-    local f="$ROOT/video/public/vo/driver-$n.mp3" h=${d[$n]}
-    [[ -s "$f" ]] && h=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$f" | awk '{printf "%.1f", $1 + 0.1}')
-    out+=$h
+  local f="$ROOT/video/public/vo/ramble-1.mp3" h=21.0
+  [[ -s "$f" ]] && h=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$f" | awk '{printf "%.1f", $1 + 0.1}')
+  print -r -- $h
+}
+
+# 탭을 보내고 결과를 돌려준다: 0 = 눌렀음, 1 = 버튼 없음. 시간 안에 둘 다 없으면 멈춘다.
+try_tap() {
+  local name="$1"; shift
+  local before=$(grep -c -E -- "tap $name (x=|missing)" "$LOG" 2>/dev/null || true) start=$SECONDS
+  tap "$name" "$@"
+  while (( $(grep -c -E -- "tap $name (x=|missing)" "$LOG" 2>/dev/null || true) <= before )); do
+    (( SECONDS - start > 10 )) && { say "시간 초과: tap $name"; exit 1; }
+    sleep 0.2
   done
-  print -r -- ${(j:,:)out}
+  grep -E -- "tap $name (x=|missing)" "$LOG" | tail -1 | grep -q missing && return 1
+  say "ok  $(grep -E -- "tap $name x=" "$LOG" | tail -1 | sed -E 's/^.*\): //')"
 }
 
 shot() { [[ -n "${SHOTS:-}" ]] && { mkdir -p "$SHOTS"; "$ADB" exec-out screencap -p > "$SHOTS/$1.png"; }; true; }
@@ -121,20 +134,25 @@ case "$STEP" in
   reset)
     start_log
     reset_app
-    wait_log 'history seeded set=film' 1 30
+    wait_log 'history seeded set=film' 1 120
     ;;
 
   day1)
     "$ADB" emu geo fix 126.9 37.4 >/dev/null
     start_log
     reset_app
-    wait_log 'history seeded set=film' 1 30
+    wait_log 'history seeded set=film' 1 120
     start_rec
     "$ADB" shell am start -W --user 10 -n $PKG/ai.pleos.hello.MainActivity >/dev/null
     sleep 2.5 # S3 동의 화면을 2초 이상 보인다(컷 2)
     shot d1-01-consent
-    tap consent
-    wait_tap consent
+    # 부하가 크거나 콜드 부팅 직후면 내비가 늦게 떠 우리 앱을 가리거나 동의 화면이 아직 배치되지 않는다.
+    # 못 찾으면 앱을 다시 앞으로 올리고 2초 간격으로 다섯 번까지 다시 누른다
+    for try in 1 2 3 4 5; do
+      try_tap consent && break
+      (( try == 5 )) && { say "버튼 없음: consent"; exit 1; }
+      "$ADB" shell am start --user 10 -n $PKG/ai.pleos.hello.MainActivity >/dev/null; sleep 2
+    done
     wait_log 'consent GRANTED' 1 10
     wait_log 'claude warm ok' 1 20
     HOLDS=$(holds)
@@ -144,35 +162,49 @@ case "$STEP" in
     wait_log 'demo start day=1' 1 20
     sleep 1; shot d1-02-s0
     wait_log 'inject utterance 1' 1 60
-    wait_log 'llm ok: claude' 1 60
-    wait_log 'committed DONE items=1' 1 30
-    wait_log 'inject utterance 2' 1 60
-    sleep 1.5; shot d1-03-listening
-    wait_log 'llm ok: claude' 2 60
-    wait_log 'committed DONE items=2' 1 30
-    wait_log 'inject utterance 3' 1 60
-    wait_log 'committed FAILED items=1' 1 30
-    wait_log 'fake gear P' 1 60
+    sleep 3; shot d1-03-listening
+    wait_log 'llm ok: claude' 1 90
+    wait_log 'committed DONE items=' 1 30
+    wait_log 'fake gear P' 1 90
     wait_log 'session end' 1 30
     wait_log 'output showCard' 1 30
     wait_log 'remind candidates n=' 1 30
+    wait_log 'digest (ok: claude|fallback)' 1 30
     wait_log 'summary speak:' 1 30
-    shot d1-04-card
+    sleep 0.5; shot d1-04-card
     wait_log 'event SummaryDone' 1 30
     sleep 1.5
-    tap delete --es text "'음 그 뭐냐'" # adb shell 이 한 번 더 쪼개므로 기기 쪽 따옴표를 넣는다
-    wait_tap delete
-    sleep 0.5; shot d1-05-delete-ask
+    try_tap group --es text 일 || { say "버튼 없음: 일 묶음"; exit 1; }
+    wait_log 'group open WORK' 1 10
+    sleep 0.5; shot d1-05-work
+    sleep 2
+    try_tap tab --es text 아이디어 || { say "버튼 없음: 아이디어 탭"; exit 1; }
+    wait_log 'group open IDEA' 1 10
+    sleep 0.5; shot d1-06-idea
+    sleep 1.5
+    # 짬뽕이 아이디어로 갔으면 여기서, 일로 갔으면 일 탭으로 옮겨 지운다
+    if ! try_tap delete --es text 짬뽕; then
+      try_tap tab --es text 일 || { say "버튼 없음: 일 탭"; exit 1; }
+      sleep 1
+      try_tap delete --es text 짬뽕 || { say "버튼 없음: 짬뽕 지우기"; exit 1; }
+    fi
+    sleep 0.5; shot d1-07-delete-ask
     sleep 1
-    tap delete-confirm --es text "'음 그 뭐냐'"
-    wait_tap delete-confirm
+    try_tap delete-confirm --es text 짬뽕 || { say "버튼 없음: 짬뽕 확인"; exit 1; }
     wait_log 'item deleted id=' 1 10
-    sleep 0.5; shot d1-06-deleted
+    sleep 0.5; shot d1-08-deleted
+    sleep 1.5
+    try_tap back-summary || { say "버튼 없음: 요약으로"; exit 1; }
+    wait_log 'group close' 1 10
+    sleep 1
+    try_tap trip || { say "버튼 없음: 이번 주행"; exit 1; }
+    wait_log 'trip open' 1 10
+    sleep 0.5; shot d1-09-trip
     sleep 2
     tap qr
     wait_tap qr
     wait_log 'qr open bytes=' 1 10
-    sleep 0.5; shot d1-07-qr
+    sleep 0.5; shot d1-10-qr
     sleep 3
     tap qr-close
     wait_tap qr-close
@@ -181,12 +213,12 @@ case "$STEP" in
     tap history
     wait_tap history
     wait_log 'history rows=[0-9]+ todoOnly=false' 1 10
-    sleep 0.5; shot d1-08-history
+    sleep 0.5; shot d1-11-history
     sleep 2
     tap todo-only
     wait_tap todo-only
     wait_log 'history rows=[0-9]+ todoOnly=true' 1 10
-    sleep 0.5; shot d1-09-todo-only
+    sleep 0.5; shot d1-12-todo-only
     sleep 5
     stop_rec
     demo --es cmd ignition-off
@@ -249,6 +281,6 @@ case "$STEP" in
     ROUTE_PID=
     ;;
 
-  *) echo "v2 reset|day1|day2"; exit 1 ;;
+  *) echo "v3 reset|day1|day2"; exit 1 ;;
 esac
 say "끝 ($STEP, $((SECONDS - T0))초). 로그 $LOG"

@@ -30,14 +30,26 @@ class SummaryComposerTest {
 
     @Test fun noEmotion() = assertEquals("생각이 좀 있었네.", SummaryComposer.compose(listOf(thought)))
 
-    @Test fun twoEmotionsOther() =
-        assertEquals("감정이 올라왔다, 가라앉았다.", SummaryComposer.compose(listOf(emo(Emotion.UP), emo(Emotion.DOWN))))
+    @Test fun upThenDown() =
+        assertEquals("좋게 시작했는데 좀 가라앉았네.", SummaryComposer.compose(listOf(emo(Emotion.UP), emo(Emotion.DOWN))))
 
-    @Test fun threeEmotionsNotDownThenUp() =
+    @Test fun manyEmotions_onlyFirstAndLastMatter() {
+        assertEquals("오늘은 좀 힘들었네.", SummaryComposer.compose(listOf(emo(Emotion.DOWN), emo(Emotion.UP), emo(Emotion.DOWN))))
+        assertEquals("오늘은 괜찮았네.", SummaryComposer.compose(listOf(emo(Emotion.NEUTRAL), emo(Emotion.DOWN), emo(Emotion.NEUTRAL))))
+    }
+
+    /** v3 데모 혼잣말(TRD §8-11): 감정 ↓ ↑ ↓, 할 일 둘, 생각 셋. */
+    @Test fun longRamble_firstLastEmotion_plusTodoAndIdeaCounts() =
         assertEquals(
-            "감정이 가라앉았다, 그냥, 가라앉았다.",
-            SummaryComposer.compose(listOf(emo(Emotion.DOWN), emo(Emotion.NEUTRAL), emo(Emotion.DOWN))),
+            "오늘은 좀 힘들었네. 할 일 둘, 아이디어 셋 있어.",
+            SummaryComposer.compose(listOf(emo(Emotion.DOWN), emo(Emotion.UP), thought, todo, todo, emo(Emotion.DOWN), thought, thought)),
         )
+
+    @Test fun ideasOnlyWithoutEmotionOrTodo_noCount() =
+        assertEquals("생각이 좀 있었네.", SummaryComposer.compose(listOf(thought, thought)))
+
+    @Test fun rawIsNotCountedAsIdea() =
+        assertEquals("오늘은 괜찮았네.", SummaryComposer.compose(listOf(emo(Emotion.UP), SummaryItem(ItemType.RAW))))
 
     @Test fun downNeutralUpMiddleIgnored() =
         assertEquals(
@@ -67,8 +79,8 @@ class SummaryComposerTest {
         )
 
     @Test fun todoCountWords() {
-        assertEquals("생각이 좀 있었네. 할 일 둘 있어.", SummaryComposer.compose(listOf(thought, todo, todo)))
-        assertEquals("생각이 좀 있었네. 할 일 셋 있어.", SummaryComposer.compose(listOf(thought, todo, todo, todo)))
+        assertEquals("생각이 좀 있었네. 할 일 둘, 아이디어 하나 있어.", SummaryComposer.compose(listOf(thought, todo, todo)))
+        assertEquals("생각이 좀 있었네. 할 일 셋 있어.", SummaryComposer.compose(listOf(todo, todo, todo)))
     }
 
     @Test fun todoOnlyIsNoEmotion() =
@@ -81,7 +93,7 @@ class SummaryComposerTest {
         )
 
     @Test fun capsAt40Chars() {
-        val items = List(12) { emo(Emotion.NEUTRAL) } + todo
+        val items = listOf(emo(Emotion.DOWN), emo(Emotion.UP, "아주 길고 길게 이어지는 한강 노을 풍경"), todo, todo, thought)
         assertEquals(40, SummaryComposer.compose(items).length)
     }
 

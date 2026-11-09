@@ -6,7 +6,8 @@ import java.util.TimeZone
 /** 데모 시나리오 v2 의 시각 계산(순수). video-script.md "파이프라인 요구사항" 공통 2·4. */
 object DemoPlan {
     /** 대본의 듣는 중 유지 시간(대사 mp3 길이 + 0.1초). run-demo.sh 가 ffprobe 로 잰 값을 넘기면 그것을 쓴다. */
-    val DEFAULT_HOLDS_MS = listOf(3_600L, 8_400L, 2_200L)
+    /** v3 1일차 혼잣말 하나의 듣는 중 유지 시간(ramble-1.mp3 길이 + 0.1초가 없을 때). */
+    val DEFAULT_HOLDS_MS = listOf(21_000L)
 
     /** 듣는 중을 [holdMs] 유지하면 저장이 그만큼 늦으므로, 앱 시계로 그 [speed] 배만큼 앞당겨 탭한다. */
     fun leadMs(holdMs: Long, speed: Double): Long = (holdMs * speed).toLong()
