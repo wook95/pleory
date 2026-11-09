@@ -142,7 +142,7 @@ Vehicle SDK 가 `ai.pleos.playground.service.vehicle.VEHICLE_BINDING` 을 자동
 ## APK 파일 위치 또는 GitHub Release 링크
 
 - GitHub Release: https://github.com/wook95/pleory/releases/tag/v0.3
-  - `pleory-film.mp4`: 시연 영상
+  - `pleory-demo-v3.mp4`: 시연 영상
   - debug APK: 내부 확인용
 - 제출용 release APK `팀명_Pleory_release.apk` 는 사용량 한도를 건 전용 키로 다시 빌드해 저장소 `apk/` 폴더와 Release 에 올린다(제출 전 추가 예정).
 
@@ -150,7 +150,7 @@ Vehicle SDK 가 `ai.pleos.playground.service.vehicle.VEHICLE_BINDING` 을 자동
 
 ## 시연 영상
 
-1분 55초, 두 테이크(1일차 퇴근길, 2일차 출근길)를 이어 붙였다. 1일차는 운전자가 긴 혼잣말을 한 번 하고 카드가 감정 / 일 / 아이디어로 정리해 보여 준다. 에뮬레이터 화면 녹화이고 운전자 대사는 ElevenLabs 로 만든 음성이다(앱에는 같은 단어를 텍스트로 입력). 파일은 위 Release 의 `pleory-film.mp4` 이고, 편집 소스는 `video/`(Remotion)에 있다.
+1분 55초, 두 테이크(1일차 퇴근길, 2일차 출근길)를 이어 붙였다. 1일차는 운전자가 긴 혼잣말을 한 번 하고 카드가 감정 / 일 / 아이디어로 정리해 보여 준다. 에뮬레이터 화면 녹화이고 운전자 대사는 ElevenLabs 로 만든 음성이다(앱에는 같은 단어를 텍스트로 입력). 파일은 위 Release 의 `pleory-demo-v3.mp4` 이고(렌더 출력은 `apk/video/pleory-film.mp4`), 편집 소스는 `video/`(Remotion)에 있다.
 
 ## 데이터 원칙
 
