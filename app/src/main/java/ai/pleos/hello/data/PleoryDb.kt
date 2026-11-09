@@ -11,7 +11,7 @@ import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
 
 @Database(
     entities = [Session::class, Utterance::class, Item::class, TrackPoint::class, Place::class],
-    version = 2,
+    version = 3,
     exportSchema = false,
 )
 @TypeConverters(Converters::class)
@@ -37,6 +37,16 @@ abstract class PleoryDb : RoomDatabase() {
             override fun migrate(db: SupportSQLiteDatabase) = MIGRATION_1_2_SQL.forEach(db::execSQL)
         }
 
+        /** v3: 카드 묶음별 대표 문장(TRD §8-11). 기존 세션은 null 이라 화면이 규칙 폴백으로 그린다. */
+        val MIGRATION_2_3_SQL = listOf(
+            "ALTER TABLE `session` ADD COLUMN `headlineEmotion` TEXT",
+            "ALTER TABLE `session` ADD COLUMN `headlineWork` TEXT",
+            "ALTER TABLE `session` ADD COLUMN `headlineIdea` TEXT",
+        )
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) = MIGRATION_2_3_SQL.forEach(db::execSQL)
+        }
+
         /** SQLCipher 로 암호화해 연다. 비밀번호는 Keystore 로 감싸 둔다([DbKey]). */
         fun get(context: Context): PleoryDb = instance ?: synchronized(this) {
             instance ?: run {
@@ -44,7 +54,7 @@ abstract class PleoryDb : RoomDatabase() {
                 val app = context.applicationContext
                 Room.databaseBuilder(app, PleoryDb::class.java, NAME)
                     .openHelperFactory(SupportOpenHelperFactory(DbKey.passphrase(app, NAME)))
-                    .addMigrations(MIGRATION_1_2)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                     .build().also { instance = it }
             }
         }

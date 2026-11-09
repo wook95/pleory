@@ -35,6 +35,12 @@ data class CardUtterance(
     val point: GeoPoint?,
 )
 
+/** 묶음 상세의 항목 한 줄. 시각·장소·원문은 그 항목이 나온 한마디의 것. */
+data class CardGroupItem(val item: CardItem, val time: String, val place: String?, val quote: String)
+
+/** 카드 묶음(감정·일·아이디어) 하나: 대표 문장과 항목들(TRD §8-11). 항목이 없는 묶음은 만들지 않는다. */
+data class CardGroup(val group: ItemGroup, val headline: String, val items: List<CardGroupItem>)
+
 /**
  * S1 카드 표시용 값 전부. 순수 데이터라 JVM 테스트로 검증한다.
  * [sentence] 는 통계를 타일 대신 문장으로 쓴 두 줄(시안 r2 A "일지"). [startLabel]·[endLabel] 은 경로 끝점 라벨.
@@ -52,6 +58,10 @@ data class CardModel(
     val endLabel: String = "",
     val heading: String = "",
     val summary: String? = null,
+    /** 감정 → 일 → 아이디어 순, 항목이 있는 묶음만. */
+    val groups: List<CardGroup> = emptyList(),
+    /** 저장된 대표 문장이 없어 규칙 폴백으로 채웠는가(LLM 결과를 기다리는 중이거나 실패). */
+    val headlinesFallback: Boolean = false,
 ) {
     val items: List<CardItem> get() = utterances.flatMap { it.items }
 }
@@ -111,6 +121,7 @@ object CardModelBuilder {
     ): CardModel {
         val endedAt = session.endedAt ?: session.startedAt
         val cards = utterances.sortedBy { it.first.at }.map { (u, items) -> utteranceCard(u, items, tz) }
+        val (groups, fallback) = groups(session, cards)
         fun leg(at: Long, label: String?) = listOfNotNull(CardFormat.time(at, tz), label).joinToString(" ")
         return CardModel(
             date = CardFormat.date(endedAt, tz),
@@ -124,7 +135,29 @@ object CardModelBuilder {
             endLabel = leg(endedAt, session.destLabel),
             heading = "${CardFormat.format("M월 d일", session.startedAt, tz)} ${CardFormat.segmentName(session.segment)} ${CardFormat.timeRange(session.startedAt, endedAt, tz)}",
             summary = session.summaryText?.takeIf { it.isNotBlank() },
+            groups = groups,
+            headlinesFallback = fallback,
         )
+    }
+
+    /**
+     * 묶음 나누기와 대표 문장. 저장된 대표 문장(세션 행)이 하나라도 있으면 그것을 쓰고, 저장값이 빈 묶음만 규칙 폴백으로 채운다.
+     * 하나도 없으면 전부 규칙 폴백([CardDigest.fallback]).
+     */
+    private fun groups(session: Session, cards: List<CardUtterance>): Pair<List<CardGroup>, Boolean> {
+        val flat = cards.flatMap { u -> u.items.map { CardGroupItem(it, u.time, u.place, u.quote) } }
+        if (flat.isEmpty()) return emptyList<CardGroup>() to false
+        val stored = Headlines(session.headlineEmotion, session.headlineWork, session.headlineIdea)
+        val anyStored = ItemGroup.entries.any { stored[it] != null }
+        val rule = CardDigest.fallback(flat.map { DigestItem(it.item.text, it.item.type, it.item.emotion) })
+        var usedRule = !anyStored
+        val groups = ItemGroup.entries.mapNotNull { g ->
+            val items = flat.filter { ItemGroup.of(it.item.type) == g }
+            if (items.isEmpty()) return@mapNotNull null
+            val headline = stored[g]?.takeIf { anyStored } ?: rule[g]!!.also { usedRule = true }
+            CardGroup(g, headline, items)
+        }
+        return groups to usedRule
     }
 
     private fun utteranceCard(u: Utterance, items: List<Item>, tz: TimeZone): CardUtterance {

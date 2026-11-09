@@ -34,6 +34,10 @@ data class Session(
     val summaryText: String? = null,
     val cardSeen: Boolean = false,
     val state: SessionState = SessionState.OPEN,
+    /** 카드 묶음별 대표 문장(TRD §8-11). null 이면 화면이 규칙 폴백으로 그린다. 항목을 지우면 비우고 다시 만든다. */
+    val headlineEmotion: String? = null,
+    val headlineWork: String? = null,
+    val headlineIdea: String? = null,
 )
 
 /** 한마디(STT 원문). 음성 파일은 저장하지 않는다. */

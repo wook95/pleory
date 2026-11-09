@@ -19,6 +19,10 @@ interface SessionDao {
     suspend fun latestEnded(exclude: Long): Long?
     @Query("UPDATE session SET state = :state, endedAt = :endedAt WHERE id = :id")
     suspend fun close(id: Long, state: SessionState, endedAt: Long)
+    @Query("UPDATE session SET headlineEmotion = :emotion, headlineWork = :work, headlineIdea = :idea WHERE id = :id")
+    suspend fun setHeadlines(id: Long, emotion: String?, work: String?, idea: String?)
+    @Query("SELECT utterance.sessionId FROM item JOIN utterance ON item.utteranceId = utterance.id WHERE item.id = :itemId")
+    suspend fun sessionOfItem(itemId: Long): Long?
 
     /** S2 지난 기록: [since] 이후에 시작해 끝난 세션, 최신순(F11). */
     @Query("SELECT * FROM session WHERE profileId = :profileId AND startedAt >= :since AND endedAt IS NOT NULL ORDER BY startedAt DESC")
@@ -86,6 +90,7 @@ interface ReminderDao {
     @Query(CANDIDATES_SQL) suspend fun candidates(profileId: String, since: Long): List<ReminderCandidate>
     @Query("UPDATE item SET remindedAt = :at WHERE id IN (:ids)") suspend fun markReminded(ids: List<Long>, at: Long)
     @Query("UPDATE item SET done = 1 WHERE id = :id") suspend fun markDone(id: Long)
+    @Query("UPDATE item SET done = :done WHERE id = :id") suspend fun setDone(id: Long, done: Boolean)
 
     companion object {
         /** 같은 프로필, [since] 이후에 말한, 끝내지도 지우지도 알리지도 않은 할 일. JVM 테스트(ReminderSqlTest)가 이 문장을 그대로 돌린다. */

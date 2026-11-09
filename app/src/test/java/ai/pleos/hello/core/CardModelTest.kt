@@ -123,4 +123,29 @@ class CardModelTest {
         val round = CardModelBuilder.build(session.copy(distanceKm = 22.5, congestionMin = 0, weather = null), emptyList(), emptyList(), tz)
         assertEquals("18:40 회사에서 출발해 23km 달려 19:31 집에 도착했어요.", round.sentence)
     }
+
+    @Test
+    fun `묶음은 감정 일 아이디어 순 없는 묶음 생략 저장 문장 없으면 규칙 폴백`() {
+        val m = build(twoItems)
+        assertEquals(listOf(ItemGroup.EMOTION, ItemGroup.WORK), m.groups.map { it.group })
+        assertEquals("오늘 팀장 때문에 진짜 힘들었다 → 노을이 예뻤다", m.groups[0].headline)
+        assertEquals("내일 거래처 서류 다시 보내기", m.groups[1].headline)
+        assertEquals(listOf("18:57", "19:08"), m.groups[0].items.map { it.time })
+        assertEquals("한강대교", m.groups[1].items.single().place)
+        assertEquals(true, m.headlinesFallback)
+    }
+
+    @Test
+    fun `저장된 대표 문장을 쓰고 빈 묶음만 폴백 지운 항목은 묶음에서 빠짐`() {
+        val stored = session.copy(headlineEmotion = "지쳤다가 노을에 풀렸어", headlineWork = null)
+        val m = CardModelBuilder.build(
+            stored,
+            listOf(u2 to twoItems + item("지운 생각", ItemType.THOUGHT, Emotion.NEUTRAL, 2).copy(deleted = true),
+                u1 to listOf(item("오늘 팀장 때문에 진짜 힘들었다", ItemType.EMOTION, Emotion.DOWN, 0))),
+            emptyList(), tz,
+        )
+        assertEquals(listOf("지쳤다가 노을에 풀렸어", "내일 거래처 서류 다시 보내기"), m.groups.map { it.headline })
+        assertEquals(listOf(ItemGroup.EMOTION, ItemGroup.WORK), m.groups.map { it.group })
+        assertEquals(true, m.headlinesFallback)
+    }
 }

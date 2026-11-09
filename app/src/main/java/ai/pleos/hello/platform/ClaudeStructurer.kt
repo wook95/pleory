@@ -1,6 +1,8 @@
 package ai.pleos.hello.platform
 
 import ai.pleos.hello.BuildConfig
+import ai.pleos.hello.core.CardDigest
+import ai.pleos.hello.core.Digester
 import ai.pleos.hello.core.StructureContract
 import ai.pleos.hello.core.Structurer
 import ai.pleos.hello.core.StructurerResult
@@ -42,7 +44,7 @@ import kotlinx.coroutines.withContext
 class ClaudeStructurer(
     private val apiKey: String = BuildConfig.CLAUDE_API_KEY,
     private val timeoutMs: Long = 4_500,
-) : Structurer {
+) : Structurer, Digester {
 
     val available: Boolean get() = apiKey.isNotBlank()
 
@@ -79,12 +81,17 @@ class ClaudeStructurer(
         }
     }
 
-    override suspend fun structure(text: String): StructurerResult {
+    override suspend fun structure(text: String): StructurerResult = call(StructureContract.SYSTEM_PROMPT, SCHEMA, text)
+
+    /** 카드 대표 문장(TRD §8-11). 보내는 것은 정리된 항목 글·유형·감정뿐이다. */
+    override suspend fun digest(input: String): StructurerResult = call(CardDigest.SYSTEM_PROMPT, DIGEST_SCHEMA, input)
+
+    private suspend fun call(system: String, schema: JsonOutputFormat.Schema, text: String): StructurerResult {
         if (!available) return StructurerResult.Error("claude unavailable")
         return try {
             // 클라이언트 생성(첫 호출)이 무거워 IO 에서 만든다
             val async = withContext(Dispatchers.IO) { client.async() }
-            val message = async.messages().create(params(text)).await()
+            val message = async.messages().create(params(system, schema, text)).await()
             when (message.stopReason().orElse(null)) {
                 StopReason.REFUSAL -> return StructurerResult.Error("claude refusal")
                 StopReason.MAX_TOKENS -> return StructurerResult.Error("claude max_tokens")
@@ -100,16 +107,16 @@ class ClaudeStructurer(
         }
     }
 
-    private fun params(text: String): MessageCreateParams = MessageCreateParams.builder()
+    private fun params(system: String, schema: JsonOutputFormat.Schema, text: String): MessageCreateParams = MessageCreateParams.builder()
         .model(MODEL)
         .maxTokens(MAX_TOKENS)
-        .system(StructureContract.SYSTEM_PROMPT)
+        .system(system)
         // 지연을 줄이려고 생각은 끄고 effort 는 low(Haiku 5.5 는 effort high 이하에서 생각 끄기를 허용)
         .thinking(ThinkingConfigDisabled.builder().build())
         .outputConfig(
             OutputConfig.builder()
                 .effort(OutputConfig.Effort.LOW)
-                .format(JsonOutputFormat.builder().schema(SCHEMA).build())
+                .format(JsonOutputFormat.builder().schema(schema).build())
                 .build(),
         )
         .addUserMessage(text)
@@ -147,7 +154,7 @@ class ClaudeStructurer(
                                 "type" to "object",
                                 "properties" to mapOf(
                                     "text" to mapOf("type" to "string"),
-                                    "type" to mapOf("type" to "string", "enum" to listOf("thought", "todo", "emotion", "person", "raw")),
+                                    "type" to mapOf("type" to "string", "enum" to listOf("thought", "todo", "emotion", "raw")),
                                     "emotion" to mapOf("type" to "string", "enum" to listOf("down", "neutral", "up")),
                                     "keywords" to mapOf("type" to "array", "items" to mapOf("type" to "string")),
                                 ),
@@ -159,6 +166,17 @@ class ClaudeStructurer(
                 ),
             )
             .putAdditionalProperty("required", JsonValue.from(listOf("items")))
+            .putAdditionalProperty("additionalProperties", JsonValue.from(false))
+            .build()
+
+        /** 카드 대표 문장 응답 모양(CardDigest). */
+        val DIGEST_SCHEMA: JsonOutputFormat.Schema = JsonOutputFormat.Schema.builder()
+            .putAdditionalProperty("type", JsonValue.from("object"))
+            .putAdditionalProperty(
+                "properties",
+                JsonValue.from(listOf("emotion", "work", "idea").associateWith { mapOf("type" to "string") }),
+            )
+            .putAdditionalProperty("required", JsonValue.from(listOf("emotion", "work", "idea")))
             .putAdditionalProperty("additionalProperties", JsonValue.from(false))
             .build()
     }

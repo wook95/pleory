@@ -15,6 +15,8 @@ import ai.pleos.hello.core.StructureResult
 import ai.pleos.hello.core.StructuredItem
 import ai.pleos.hello.core.Structurer
 import ai.pleos.hello.core.StructurerResult
+import ai.pleos.hello.core.DigestItem
+import ai.pleos.hello.core.Headlines
 import ai.pleos.hello.core.SummaryComposer
 import ai.pleos.hello.core.SummaryItem
 import ai.pleos.hello.data.LlmStatus
@@ -69,13 +71,17 @@ class SessionController(
     private val clock: Clock,
     dispatcher: CoroutineDispatcher,
     private val structureTimeoutMs: Long = 8_000,
-    private val sttTimeoutMs: Long = 15_000,
+    /** 긴 혼잣말(20초 남짓)도 담게 45초. 종료는 SDK 끝점 검출이 정하고 이건 안전장치다(TRD §8-11). */
+    private val sttTimeoutMs: Long = 45_000,
     /** 디버그 로그 훅. 이벤트·명령을 한 줄씩 넘긴다(JVM 테스트에서 android.util.Log 를 피하려고 주입). */
     private val trace: (String) -> Unit = {},
     /** 컨트롤러 코루틴의 처리되지 않은 예외 로그 훅(앱이 죽지 않게 삼키고 남긴다). */
     private val logError: (String, Throwable) -> Unit = { _, _ -> },
     /** 기어 P·제한 없음인가(ScreenGate). 리마인드는 이게 열려 있을 때만 말한다. */
     private val gateAllowed: () -> Boolean = { true },
+    /** 카드 대표 문장 체인(TRD §8-11, Claude → Gemini). null 이면 저장하지 않고 화면이 규칙 폴백으로 그린다. 동의 확인은 주입하는 쪽이 한다. */
+    private val digest: suspend (List<DigestItem>) -> Headlines? = { null },
+    private val digestTimeoutMs: Long = 8_000,
 ) {
     private class Entry(val text: String, val dbId: CompletableDeferred<Long>) {
         var generation = 0
@@ -93,6 +99,9 @@ class SessionController(
     private var sessionId = CompletableDeferred<Long>()
     private var sessionStartedAt = 0L
     private var cardJob: Job? = null
+
+    /** 세션별 진행 중인 대표 문장 작업. 같은 세션을 다시 요청하면 앞의 것을 취소한다. */
+    private val digestJobs = mutableMapOf<Long, Job>()
 
     /** 마지막 항목 삭제 쓰기. 요약·카드 읽기가 이 쓰기 뒤에 읽도록 기다린다. */
     private var itemDeleteJob: Job? = null
@@ -283,6 +292,7 @@ class SessionController(
             previous?.join()
             store.deleteItem(itemId)
             trace("item deleted id=$itemId")
+            store.sessionOfItem(itemId)?.let { scheduleDigest(it) }
             // 읽는 중인 요약은 지운 항목을 담고 있으므로 멈춘다. 다시 들으면 새로 만든다
             if (summaryText != null) endSummary(stopSpeech = true, notifyDone = true)
             outputs.refreshCard()
@@ -293,6 +303,16 @@ class SessionController(
     suspend fun loadReminders(): List<ReminderCandidate> {
         reminderJob?.join()
         return reminders
+    }
+
+    /** 묶음 상세의 체크 상자(US-13). 리마인드 "했어"와 같은 값이다. 끝내면 띠에서도 뺀다. 주행 중 차단은 화면 쪽이 한다. */
+    fun setItemDone(itemId: Long, done: Boolean) {
+        launchDb {
+            if (done) reminders = reminders.filter { it.itemId != itemId }
+            store.setItemDone(itemId, done)
+            trace("item done id=$itemId done=$done")
+            outputs.refreshCard()
+        }
     }
 
     /** 리마인드 띠의 "했어". 주행 중 차단은 화면 쪽이 한다. */
@@ -423,6 +443,7 @@ class SessionController(
                 // 리마인드는 목적지 도착으로 뜬 카드에서만 고른다(목적지 없음 + P 5초 대체 판정은 제외)
                 if (reminderJob == null && machine.cardByArrival) findReminders(session, endedAt)
                 outputs.showCard()
+                scope.launch { scheduleDigest(session.await()) }
             }
             SessionCommand.StartSummary -> {
                 outputs.startSummary()
@@ -462,7 +483,34 @@ class SessionController(
             store.replaceItems(entry.dbId.await(), items, status)
             trace("committed $status items=${items.size} dbId=${entry.dbId.await()}")
             outputs.refreshCard()
+            // 카드가 이미 떠 있으면 늦게 끝난 정리까지 넣어 대표 문장을 다시 만든다
+            if (machine.state == SessionState.CARD) store.utterance(entry.dbId.await())?.let { scheduleDigest(it.sessionId) }
         }
+    }
+
+    /**
+     * [sid] 세션의 대표 문장을 다시 만든다(TRD §8-11). 먼저 저장값을 비워 화면이 지금 항목 기준 규칙 폴백을 그리게 하고,
+     * 체인이 성공하면 저장한 뒤 카드를 다시 읽게 한다. 직렬 경로에서 부른다.
+     */
+    private fun scheduleDigest(sid: Long) {
+        digestJobs.remove(sid)?.cancel()
+        val job = launchDb {
+            cardJob?.join()
+            itemDeleteJob?.join()
+            val items = store.loadCard(sid)?.groups.orEmpty().flatMap { g -> g.items.map { DigestItem(it.item.text, it.item.type, it.item.emotion) } }
+            store.setHeadlines(sid, null)
+            if (items.isEmpty()) return@launchDb
+            val headlines = withTimeoutOrNull(digestTimeoutMs) { digest(items) }
+            if (headlines == null) {
+                trace("digest fallback: rule")
+                return@launchDb
+            }
+            store.setHeadlines(sid, headlines)
+            if (BuildConfig.DEBUG) trace("digest saved sid=$sid $headlines")
+            outputs.refreshCard()
+        }
+        digestJobs[sid] = job
+        job.invokeOnCompletion { scope.launch { if (digestJobs[sid] === job) digestJobs.remove(sid) } }
     }
 
     /** 이전 세션들의 미완료 할 일을 고른다(F15). 같은 세션에서 카드가 다시 떠도 다시 고르지 않는다(띠가 유지된다). */

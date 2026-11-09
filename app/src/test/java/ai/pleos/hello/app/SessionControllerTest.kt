@@ -1,6 +1,10 @@
 package ai.pleos.hello.app
 
+import ai.pleos.hello.core.CardModel
+import ai.pleos.hello.core.CardModelBuilder
 import ai.pleos.hello.core.Clock
+import ai.pleos.hello.core.DigestItem
+import ai.pleos.hello.core.Headlines
 import ai.pleos.hello.core.Gear
 import ai.pleos.hello.core.RuleStructurer
 import ai.pleos.hello.core.SessionEvent
@@ -8,11 +12,13 @@ import ai.pleos.hello.core.StructuredItem
 import ai.pleos.hello.core.Structurer
 import ai.pleos.hello.core.StructurerResult
 import ai.pleos.hello.data.Emotion
+import ai.pleos.hello.data.Item
 import ai.pleos.hello.data.ItemDao
 import ai.pleos.hello.data.ItemType
 import ai.pleos.hello.data.LlmStatus
 import ai.pleos.hello.data.PleoryStore
 import ai.pleos.hello.data.Segment
+import ai.pleos.hello.data.Session
 import ai.pleos.hello.data.SessionState
 import ai.pleos.hello.data.Utterance
 import ai.pleos.hello.platform.SpeechInput
@@ -80,6 +86,19 @@ private class FakeStore : PleoryStore {
     override suspend fun setLlmStatus(utteranceId: Long, status: LlmStatus) {
         utterances[utteranceId] = utterances.getValue(utteranceId).copy(llmStatus = status)
     }
+
+    /** 대표 문장 저장 기록(null = 비움). [cardEnabled] 면 loadCard 가 저장된 항목으로 카드를 만든다(기본은 다른 테스트처럼 null). */
+    val headlines = CopyOnWriteArrayList<Headlines?>()
+    @Volatile var cardEnabled = false
+    override suspend fun setHeadlines(sessionId: Long, headlines: Headlines?) { this.headlines += headlines }
+    override suspend fun sessionOfItem(itemId: Long): Long? = 1L
+    override suspend fun loadCard(sessionId: Long): CardModel? = if (!cardEnabled) null else CardModelBuilder.build(
+        Session(id = 1, profileId = "local", startedAt = 0, segment = Segment.OUTING),
+        utterances.values.map { u ->
+            u to items[u.id].orEmpty().mapIndexed { i, it -> Item(id = u.id * 10 + i, utteranceId = u.id, order = i, text = it.text, type = it.type, emotion = it.emotion, deleted = (u.id * 10 + i) in deletedItems) }
+        },
+        emptyList(),
+    )
 }
 
 private class FakeIn : SpeechInput {
@@ -126,10 +145,38 @@ class SessionControllerTest {
 
     @After fun tearDown() = executor.shutdownNow().let { }
 
-    private fun controller(structurer: Structurer, timeoutMs: Long = 8_000, outputs: SessionOutputs = NoOutputs) = SessionController(
+    private fun controller(
+        structurer: Structurer,
+        timeoutMs: Long = 8_000,
+        outputs: SessionOutputs = NoOutputs,
+        digest: suspend (List<DigestItem>) -> Headlines? = { null },
+    ) = SessionController(
         store, structurer, speechIn, speechOut, outputs, FixedContextProvider(), FixedClock(),
-        executor.asCoroutineDispatcher(), structureTimeoutMs = timeoutMs,
+        executor.asCoroutineDispatcher(), structureTimeoutMs = timeoutMs, digest = digest,
     )
+
+    @Test fun deleteItem_clearsHeadlines_thenRedigestsRemainingItems() {
+        store.cardEnabled = true
+        val seen = CopyOnWriteArrayList<List<String>>()
+        val c = controller(RuleStructurer(), digest = { items -> seen += items.map { it.text }; Headlines(work = "서류 보내기") })
+        speak(c, TEXT)
+        awaitUntil { store.replaceCalls.get() == 1 }
+        c.deleteItem(11L) // 두 번째 항목(노을)
+        awaitUntil { store.headlines.size == 2 }
+        assertEquals(listOf(null, Headlines(work = "서류 보내기")), store.headlines.toList())
+        assertEquals(listOf(listOf("내일 거래처 서류 다시 보내야 해")), seen.toList())
+    }
+
+    @Test fun digestFailure_leavesHeadlinesEmpty_forRuleFallback() {
+        store.cardEnabled = true
+        val c = controller(RuleStructurer(), digest = { null })
+        speak(c, TEXT)
+        awaitUntil { store.replaceCalls.get() == 1 }
+        c.deleteItem(11L)
+        awaitUntil { store.headlines.isNotEmpty() }
+        Thread.sleep(100)
+        assertEquals(listOf<Headlines?>(null), store.headlines.toList())
+    }
 
     private fun speak(c: SessionController, text: String) {
         c.post(SessionEvent.IgnitionOn)

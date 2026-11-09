@@ -30,9 +30,9 @@ class StructureContractTest {
     @Test fun allowsSurroundingWhitespace() =
         assertTrue(StructureContract.parse("\n  $prdSample \n") is StructureResult.Ok)
 
-    @Test fun allowsFiveItems() {
-        val r = StructureContract.parse("""{"items":[${(1..5).joinToString(",") { item(it) }}]}""")
-        assertEquals(5, (r as StructureResult.Ok).items.size)
+    @Test fun allowsEightItemsForLongRamble() {
+        val r = StructureContract.parse("""{"items":[${(1..8).joinToString(",") { item(it) }}]}""")
+        assertEquals(8, (r as StructureResult.Ok).items.size)
     }
 
     @Test fun allTypesAndEmotions() {
@@ -59,7 +59,9 @@ class StructureContractTest {
     @Test fun failsOnTopLevelArray() = failed("[${item()}]")
     @Test fun failsOnMissingItems() = failed("""{"result":[]}""")
     @Test fun failsOnEmptyItems() = failed("""{"items":[]}""")
-    @Test fun failsOnSixItems() = failed("""{"items":[${(1..6).joinToString(",") { item(it) }}]}""")
+    @Test fun allowsTenItems_marginOverPromptLimit() =
+        assertEquals(10, (StructureContract.parse("""{"items":[${(1..10).joinToString(",") { item(it) }}]}""") as StructureResult.Ok).items.size)
+    @Test fun failsOnElevenItems() = failed("""{"items":[${(1..11).joinToString(",") { item(it) }}]}""")
     @Test fun failsOnUnknownType() = failed("""{"items":[{"text":"x","type":"memo","emotion":"neutral"}]}""")
     @Test fun failsOnUppercaseType() = failed("""{"items":[{"text":"x","type":"TODO","emotion":"neutral"}]}""")
     @Test fun failsOnUnknownEmotion() = failed("""{"items":[{"text":"x","type":"raw","emotion":"angry"}]}""")

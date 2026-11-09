@@ -57,6 +57,28 @@ class ReminderSqlTest {
         }
     }
 
+    @Test fun migration2to3_addsHeadlines_matchesCurrentSessionSchema_andKeepsRows() {
+        createV1()
+        PleoryDb.MIGRATION_1_2_SQL.forEach(::exec)
+        exec("INSERT INTO session (id, profileId, startedAt, segment, distanceKm, durationMin, congestionMin, cardSeen, state) VALUES (1, 'p', 0, 'COMMUTE_OUT', 0, 0, 0, 0, 'CLOSED')")
+
+        PleoryDb.MIGRATION_2_3_SQL.forEach(::exec)
+        val migrated = columns("session")
+
+        val sessionV3 = roomCreateStatements().single { it.startsWith("CREATE TABLE IF NOT EXISTS `session` ") }
+        exec(sessionV3.replace("`session`", "`session_v3`"))
+        assertEquals(columns("session_v3"), migrated)
+
+        db.createStatement().use { st ->
+            st.executeQuery("SELECT headlineEmotion, headlineWork, headlineIdea FROM session WHERE id = 1").use { rs ->
+                rs.next()
+                assertEquals(null, rs.getObject("headlineEmotion"))
+                assertEquals(null, rs.getObject("headlineWork"))
+                assertEquals(null, rs.getObject("headlineIdea"))
+            }
+        }
+    }
+
     @Test fun candidatesSql_filtersProfileWindowTypeAndFlags_newestFirst() {
         createV1()
         PleoryDb.MIGRATION_1_2_SQL.forEach(::exec)

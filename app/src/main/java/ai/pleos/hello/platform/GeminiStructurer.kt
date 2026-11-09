@@ -1,6 +1,8 @@
 package ai.pleos.hello.platform
 
 import ai.pleos.hello.BuildConfig
+import ai.pleos.hello.core.CardDigest
+import ai.pleos.hello.core.Digester
 import ai.pleos.hello.core.StructureContract
 import ai.pleos.hello.core.Structurer
 import ai.pleos.hello.core.StructurerResult
@@ -33,14 +35,19 @@ import java.net.UnknownHostException
 class GeminiStructurer(
     private val apiKey: String = BuildConfig.GEMINI_API_KEY,
     private val budgetMs: Int = 8_000,
-) : Structurer {
+) : Structurer, Digester {
 
-    override suspend fun structure(text: String): StructurerResult = withContext(Dispatchers.IO) {
+    override suspend fun structure(text: String): StructurerResult = request(StructureContract.SYSTEM_PROMPT, SCHEMA, text)
+
+    /** 카드 대표 문장(TRD §8-11). */
+    override suspend fun digest(input: String): StructurerResult = request(CardDigest.SYSTEM_PROMPT, DIGEST_SCHEMA, input)
+
+    private suspend fun request(system: String, schema: String, text: String): StructurerResult = withContext(Dispatchers.IO) {
         val deadline = System.currentTimeMillis() + budgetMs
         var attempt = 0
         while (true) {
             attempt++
-            val r = callOnce(text, (deadline - System.currentTimeMillis()).toInt())
+            val r = callOnce(system, schema, text, (deadline - System.currentTimeMillis()).toInt())
             currentCoroutineContext().ensureActive()
             if (r !is Attempt.Retryable) return@withContext r.toResult()
             val left = deadline - System.currentTimeMillis()
@@ -65,7 +72,7 @@ class GeminiStructurer(
     }
 
     @OptIn(InternalCoroutinesApi::class)
-    private suspend fun callOnce(text: String, timeoutMs: Int): Attempt {
+    private suspend fun callOnce(system: String, schema: String, text: String, timeoutMs: Int): Attempt {
         if (timeoutMs <= 0) return Attempt.Fail("gemini timeout")
         val conn = (URL("$ENDPOINT/$MODEL:generateContent").openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"
@@ -77,7 +84,7 @@ class GeminiStructurer(
         }
         val handle = currentCoroutineContext().job.invokeOnCompletion(onCancelling = true) { conn.disconnect() }
         return try {
-            conn.outputStream.use { it.write(requestBody(text).toByteArray()) }
+            conn.outputStream.use { it.write(requestBody(system, schema, text).toByteArray()) }
             val code = conn.responseCode
             when {
                 code == 200 -> parseText(conn.inputStream.bufferedReader().readText())
@@ -107,14 +114,14 @@ class GeminiStructurer(
         Attempt.Fail("gemini response parse failure")
     }
 
-    private fun requestBody(text: String): String = JSONObject()
-        .put("systemInstruction", JSONObject().put("parts", JSONArray().put(JSONObject().put("text", StructureContract.SYSTEM_PROMPT))))
+    private fun requestBody(system: String, schema: String, text: String): String = JSONObject()
+        .put("systemInstruction", JSONObject().put("parts", JSONArray().put(JSONObject().put("text", system))))
         .put("contents", JSONArray().put(JSONObject().put("role", "user")
             .put("parts", JSONArray().put(JSONObject().put("text", text)))))
         .put("generationConfig", JSONObject()
             .put("temperature", 0.2)
             .put("responseMimeType", "application/json")
-            .put("responseSchema", JSONObject(SCHEMA))
+            .put("responseSchema", JSONObject(schema))
             .put("thinkingConfig", JSONObject().put("thinkingBudget", 0)))
         .toString()
 
@@ -124,8 +131,10 @@ class GeminiStructurer(
         const val RETRY_DELAY_MS = 300L
         const val MIN_RETRY_MS = 1_500L
         const val SCHEMA = """{"type":"OBJECT","properties":{"items":{"type":"ARRAY","items":{"type":"OBJECT","properties":{
-"text":{"type":"STRING"},"type":{"type":"STRING","enum":["thought","todo","emotion","person","raw"]},
+"text":{"type":"STRING"},"type":{"type":"STRING","enum":["thought","todo","emotion","raw"]},
 "emotion":{"type":"STRING","enum":["down","neutral","up"]},"keywords":{"type":"ARRAY","items":{"type":"STRING"}}},
 "required":["text","type","emotion","keywords"]}}},"required":["items"]}"""
+        const val DIGEST_SCHEMA = """{"type":"OBJECT","properties":{"emotion":{"type":"STRING"},"work":{"type":"STRING"},"idea":{"type":"STRING"}},
+"required":["emotion","work","idea"]}"""
     }
 }

@@ -6,6 +6,7 @@ import ai.pleos.hello.app.SessionController
 import ai.pleos.hello.app.SessionOutputs
 import ai.pleos.hello.core.Clock
 import ai.pleos.hello.core.ConsentGatedStructurer
+import ai.pleos.hello.core.DigestChain
 import ai.pleos.hello.core.FallbackStructurer
 import ai.pleos.hello.core.ScreenGate
 import ai.pleos.hello.core.DemoClock
@@ -142,6 +143,8 @@ class PleoryApp : Application() {
             trace = { Log.i(FLOW_TAG, it) },
             logError = { msg, t -> Log.e(FLOW_TAG, msg, t) },
             gateAllowed = ::gateAllowed,
+            // 카드 대표 문장(TRD §8-11): 같은 Claude → Gemini, 동의가 없으면 부르지 않고 규칙 폴백
+            digest = { items -> if (consent.llmAllowed) digestChain().run(items) else null },
         )
         sdkHub.uxRestrictions.addListener { required ->
             Log.i(FLOW_TAG, "ux required=$required active=${sdkHub.uxRestrictions.activeRestrictions} gate=${gateAllowed()}")
@@ -190,6 +193,17 @@ class PleoryApp : Application() {
             listOf(
                 FallbackStructurer.Step("claude", claude, timeoutMs = CLAUDE_BUDGET_MS, available = { claude.available }),
                 FallbackStructurer.Step("gemini", gemini),
+            ),
+            trace = { Log.i(FLOW_TAG, it) },
+        )
+    }
+
+    private fun digestChain(): DigestChain {
+        val gemini = GeminiStructurer(budgetMs = if (claude.available) GEMINI_AFTER_CLAUDE_MS else 8_000)
+        return DigestChain(
+            listOf(
+                DigestChain.Step("claude", claude, timeoutMs = CLAUDE_BUDGET_MS, available = { claude.available }),
+                DigestChain.Step("gemini", gemini),
             ),
             trace = { Log.i(FLOW_TAG, it) },
         )

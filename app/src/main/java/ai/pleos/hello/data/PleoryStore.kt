@@ -51,6 +51,15 @@ interface PleoryStore {
 
     /** 리마인드 띠의 "했어". */
     suspend fun markItemDone(itemId: Long) {}
+
+    /** 묶음 상세의 체크 상자(US-13). 리마인드 "했어"와 같은 값이라 되돌릴 수도 있다. */
+    suspend fun setItemDone(itemId: Long, done: Boolean) {}
+
+    /** 카드 대표 문장(TRD §8-11). null 이면 비운다(화면은 규칙 폴백). */
+    suspend fun setHeadlines(sessionId: Long, headlines: ai.pleos.hello.core.Headlines?) {}
+
+    /** 항목이 속한 세션. 지난 카드에서 지웠을 때 그 세션의 대표 문장을 다시 만들려고 쓴다. */
+    suspend fun sessionOfItem(itemId: Long): Long? = null
 }
 
 class RoomPleoryStore(private val db: PleoryDb) : PleoryStore {
@@ -117,6 +126,10 @@ class RoomPleoryStore(private val db: PleoryDb) : PleoryStore {
     override suspend fun reminderCandidates(profileId: String, since: Long) = db.reminders().candidates(profileId, since)
     override suspend fun markReminded(itemIds: List<Long>, at: Long) { if (itemIds.isNotEmpty()) db.reminders().markReminded(itemIds, at) }
     override suspend fun markItemDone(itemId: Long) = db.reminders().markDone(itemId)
+    override suspend fun setItemDone(itemId: Long, done: Boolean) = db.reminders().setDone(itemId, done)
+    override suspend fun setHeadlines(sessionId: Long, headlines: ai.pleos.hello.core.Headlines?) =
+        db.sessions().setHeadlines(sessionId, headlines?.emotion, headlines?.work, headlines?.idea)
+    override suspend fun sessionOfItem(itemId: Long) = db.sessions().sessionOfItem(itemId)
 
     override suspend fun deleteAll(): Unit = withContext(Dispatchers.IO) {
         db.clearAllTables()
