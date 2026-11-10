@@ -13,6 +13,8 @@ https://document.pleos.ai/docs/pleos-only/getting-started
 - **applicationId `com.pplab.pleory`, Kotlin 패키지·namespace `ai.pleos.hello`** (2026-11-08 변경). 컴포넌트 이름은 `com.pplab.pleory/ai.pleos.hello.MainActivity` 처럼 전체 클래스명으로 쓴다 — `com.pplab.pleory/.MainActivity` 는 없는 클래스를 가리킨다.
 - JDK 는 Android Studio 번들 JBR: `JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"` (`~/.zshrc` 에 설정됨).
 
+- 제출용 APK 는 `./gradlew assembleRelease` → `apk/PPLab_Pleory_release.apk`(키스토어·비밀번호는 `local.properties` 의 `release.*`). debug 와 서명이 달라 서로 바꿔 깔면 uninstall 이 필요하고 앱 데이터가 지워진다 — 데모 녹화를 끝낸 뒤 release 를 시험한다.
+
 ```bash
 ./gradlew assembleDebug
 adb install -r app/build/outputs/apk/debug/app-debug.apk
@@ -84,3 +86,4 @@ adb logcat -s PleosHello:I
 ## 시연 영상 (`video/`, Remotion)
 
 - `public/` 에 새 음원·영상을 넣으면 `scripts/scan-assets.mjs` 의 목록에도 넣는다. 목록에 없으면 컴포지션이 그 자산을 소리 없이 건너뛴다(렌더는 성공한다). 렌더 뒤 구간별 음량(astats RMS)으로 확인한다.
+- 녹화 소리가 지지직거리면 원본 `raw.webm` 의 오디오 패킷 수 × 23ms 를 그 구간의 실제 경과 시간과 비교한다(`ffprobe -select_streams a -show_entries packet=pts_time -read_intervals A%B`). 짧으면 부하로 녹화 단계에서 소리를 잃은 것이라 편집으로는 못 고친다 — 그날을 다시 찍는다.
