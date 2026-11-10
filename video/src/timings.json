@@ -91,15 +91,15 @@
     }
   },
   "d2": {
-    "clock0": 1.915,
-    "gleoInject": 42.083,
-    "gleoAccepted": 45.911,
-    "gleoResponse": 45.923,
-    "gearP": 104.019,
-    "cardShown": 104.033,
-    "remindStart": 106.008,
-    "summaryEnd": 123.297,
-    "remindDoneTap": 125.037,
+    "clock0": 5.167,
+    "gleoInject": 45.375,
+    "gleoAccepted": 47.327,
+    "gleoResponse": null,
+    "gearP": 107.199,
+    "cardShown": 107.2,
+    "remindStart": 107.28,
+    "summaryEnd": 115.403,
+    "remindDoneTap": 117.043,
     "gleoSimulated": false,
     "tapXY": {
       "remind-done": {
@@ -107,8 +107,8 @@
         "y": 231
       }
     },
-    "source": "flow.log (rec_start 21:46:51.202)",
-    "syncShift": -0.042,
-    "footageDuration": 127.765
+    "source": "flow.log (rec_start 10:34:11.174)",
+    "syncShift": -0.005,
+    "footageDuration": 119.777
   }
 }

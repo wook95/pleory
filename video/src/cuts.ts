@@ -84,9 +84,9 @@ export const buildCuts = (t: Timings = timings): Cut[] => {
   const x2 = e.tapXY as Record<string, XY>;
   const qrCloseTap = d.qrClose - 0.12; // `tap qr-close` 는 `qr close` 0.12초 전
   const gleoReply = e.gleoAccepted + 1.55; // Gleo 대답 소리는 accepted 뒤 약 1.9~2.0초에 시작한다(v3 녹화 1.96초). 컷 23 은 accepted + 1.15초, 소리 0.8초 앞에서 연다
-  // 2일차 리마인드 TTS 는 긴 글을 합성하느라 로그(remindStart)보다 약 3.5초 늦게 소리가 난다(v3 녹화 109.5초).
-  // 카드가 뜬 뒤 조용한 몇 초는 컷 25 로 짧게 보이고, 컷 26 은 소리 직전부터 리마인드 두 문장만 쓴다.
-  const remindVoice = e.remindStart + 3.4;
+  // 2일차 리마인드 TTS 는 로그(remindStart)보다 늦게 소리가 난다(합성 시간. v3 재녹화 0.9초, 부하 높던 첫 녹화 3.4초).
+  // 컷 25 는 카드가 뜬 뒤 소리 전까지를 느리게 보이고, 컷 26 은 소리부터 리마인드 두 문장만 쓴다.
+  const remindVoice = e.remindStart + 0.9;
 
   const rambleCue = -0.2; // 듣는 중은 탭 0.1초 뒤 시작, 컷 6 은 탭 0.3초 뒤에 연다
   const c2Tap = tapOf(x1.consent, 1.6);
@@ -162,17 +162,17 @@ export const buildCuts = (t: Timings = timings): Cut[] => {
       driver: true, chip: true, chipAt: e.gleoAccepted, bgmDb: -6,
       subs: [{at: 0, lines: ['플레오리 앱에서, 오늘', '오후 세 시 회의 자료']}, {at: 0.3 + 3.65, lines: ['챙기라고 적어줘']}],
       cues: [{src: 'vo/driver-4.mp3', at: 0.3, volume: 1}]},
-    {n: 23, dur: 5.7, kind: 'footage', day: 2, srcStart: gleoReply - 0.4, srcEnd: gleoReply + 5.3,
+    {n: 23, dur: 6.1, kind: 'footage', day: 2, srcStart: gleoReply - 0.4, srcEnd: gleoReply + 5.7,
       appAudio: !e.gleoSimulated, note: e.gleoSimulated ? 'Gleo 호출 시뮬레이션' : undefined,
       sub: ['버튼 없이 Gleo 로도'], chip: true, bgmDb: -8},
-    {n: 24, dur: 3, kind: 'footage', day: 2, srcStart: gleoReply + 5.3, srcEnd: e.cardShown - 0.1,
+    {n: 24, dur: 3, kind: 'footage', day: 2, srcStart: gleoReply + 5.7, srcEnd: e.cardShown - 0.1,
       sub: ['회사 앞, 기어 P'], chip: true, bgmDb: 1.5, cues: [{src: 'sfx/gear-park.mp3', at: 2.6, volume: 0.5}]},
-    {n: 25, dur: 2.5, kind: 'footage', day: 2, srcStart: e.cardShown - 0.3, srcEnd: e.cardShown + 2.2,
+    {n: 25, dur: 2.5, kind: 'footage', day: 2, srcStart: e.cardShown - 0.3, srcEnd: remindVoice,
       camFrom: FULL, camTo: {scale: 1.7, cx: 0.29, cy: 0.29}, camStart: 0.5, camMove: 2.5,
       sub: ['도착하면 어제 할 일부터'], bgmDb: -4},
     // 리마인드 두 문장("어제 퇴근길에 할 일 둘 말했어. 거래처 서류 다시 보내기 외 1개.") 뒤 요약은 줄인다
-    {n: 26, dur: 6.3, kind: 'footage', day: 2, srcStart: remindVoice, srcEnd: remindVoice + 6.3,
-      appAudio: true, appFadeAt: 5.8, camFrom: {scale: 1.7, cx: 0.29, cy: 0.29},
+    {n: 26, dur: 4.6, kind: 'footage', day: 2, srcStart: remindVoice, srcEnd: remindVoice + 4.6,
+      appAudio: true, appFadeAt: 4.35, camFrom: {scale: 1.7, cx: 0.29, cy: 0.29},
       sub: ['도착하면 어제 할 일부터'], bgmDb: -8},
     {n: 27, dur: 3, kind: 'footage', day: 2, srcStart: e.remindDoneTap - 1.0, srcEnd: e.remindDoneTap + 2.0,
       camFrom: {scale: 1.5, cx: 0.33, cy: 0.33}, camTo: {scale: 1.1, cx: 0.5, cy: 0.5}, camStart: 1.3, camMove: 2.8,

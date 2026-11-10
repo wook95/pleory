@@ -5,7 +5,9 @@ local.properties
 *.iml
 .kotlin/
 .omc/
-apk/
+# 빌드 산출물은 넣지 않는다. 제출용 release APK 하나만 예외
+apk/*
+!apk/PPLab_Pleory_release.apk
 
 # video/ (Remotion): 설치물·원본에서 만든 파일·외부 음원은 저장소에 넣지 않는다
 video/node_modules/

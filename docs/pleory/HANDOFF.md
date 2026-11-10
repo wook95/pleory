@@ -12,10 +12,10 @@
 | 긴 혼잣말 정리(최대 8개 항목, STT 상한 45초) | 완료 | `core/StructureContract.kt` |
 | 요약 TTS·S2 행·QR 을 묶음 기준으로 | 완료 | `core/SummaryComposer.kt`, `core/History.kt`, `core/QrPayload.kt` |
 | 데모 파이프라인 v3 | 완료 | `tools/run-demo.sh v3 reset|day1|day2` |
-| 시연 영상 v3 (1:55, 컷 28, US 13개 전부) | 완료 | Release v0.3, `video/`, 컷 표 `docs/pleory/video-script.md` |
+| 시연 영상 v3 (1:54, 컷 28, US 13개 전부) | 완료 | Release v0.3, `video/`, 컷 표 `docs/pleory/video-script.md` |
 | 코드 리뷰 2회 | APPROVE | 아래 "검증" |
-| Release v0.3 (영상 + 내부용 debug APK) | 완료 | https://github.com/wook95/pleory/releases/tag/v0.3 |
-| 제출용 release APK | 안 함 (전용 키·팀명 필요) | 아래 "제출 절차" |
+| Release v0.3 (영상 + 제출용 release APK) | 완료 | https://github.com/wook95/pleory/releases/tag/v0.3 |
+| 제출용 release APK `PPLab_Pleory_release.apk` | 완료 (PPLab 키 서명, Claude 키만, Gemini 없음) | `apk/`, Release v0.3 |
 
 ## 기능 요약 (v0.3 에서 바뀐 것)
 
@@ -74,7 +74,7 @@ cd video && npm install && bash scripts/prepare.sh ../apk/video/v3 && npm run re
 - Release v0.2 의 debug APK 에는 개인 Claude·Gemini 키가 들어 있다. 저장소가 비공개라 두었지만 외부로 넘기지 않는다.
 - 한마디 요약 문구 "생각이 좀 있었네. 할 일 하나 있어."(감정 없이 할 일 하나뿐인 2일차)는 요약 규칙 그대로다. 어색하면 `core/SummaryComposer` 를 손본다.
 - 대표 문장 LLM 이 프롬프트 규칙을 가끔 어긴다(v3 녹화: 지운 뒤 감정 문장이 마지막 감정 "우울"을 빠뜨림, 첫 감정 문장 36자로 32자 초과). 파서는 길이 48자·빈 문장만 거른다.
-- Release v0.3 의 debug APK 에도 개인 키가 들어 있다. 외부로 넘기지 않는다.
+- 제출용 release APK 에는 개인 Claude 키가 들어 있다(계정 지출 한도 $200). 심사가 끝나면 키를 교체한다. 서명 키스토어는 `~/.android/pleory-release.jks`, 비밀번호는 `local.properties` 의 `release.*` 에만 있다(커밋 안 함). v0.2·v0.3 Release 의 debug APK 는 지웠다.
 - 설계 리뷰(v0.3, CLEAR) 뒤 남은 LOW 세 가지:
   - 대표 문장을 다시 부르지 않는 판단(`digestSignatures`)이 메모리에만 있어, 앱을 다시 켠 뒤 카드를 다시 열면 저장된 LLM 문장을 지우고 다시 부른다(`SessionController.kt` scheduleDigest). 항목 해시를 대표 문장과 함께 저장하면 된다.
   - `Car.createCar` 가 예외를 던지면 UX 제한이 열린 채로 남는다(`SdkHub.kt`). 화면 게이트가 기어 P 를 따로 요구해 주행 중 노출은 없다.
