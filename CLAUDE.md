@@ -77,3 +77,10 @@ adb logcat -s PleosHello:I
   (`~/.android/repositories.cfg` 에 등록됨. Windows/Linux 는 `crp-sys-img.xml`)
 - 새 이미지 버전으로 바꿀 때는 기존 이미지를 먼저 지운다 (가이드 지시).
 - Virtual Console 은 에뮬레이터 2.1.0 이상이 필요하다.
+- 콜드 부팅 직후 시간대가 America/Los_Angeles 로 뜨고, 한국 좌표(`adb emu geo fix`)를 받은 뒤 Asia/Seoul 로 바뀐다. 앱 시계를 쓰는 데모는 바뀐 뒤에 시작한다(`tools/run-demo.sh` 가 기다린다).
+- 녹화(`adb emu screenrecord`)는 창 있는 에뮬레이터로 한다. `-no-window` 에서는 앱 TTS 가 나오는 순간 "Error while writing audio frame" 으로 멈춘다. 호스트 부하가 높으면 창이 있어도 "hanging thread" 로 꺼질 수 있다 — 다시 띄워 다시 찍는다.
+- `wm size`/`wm density` 로는 앱 창(TaskView)이 좁아지지 않는다. 좁은 창 확인은 debug `CardPreviewActivity --ei width 900`.
+
+## 시연 영상 (`video/`, Remotion)
+
+- `public/` 에 새 음원·영상을 넣으면 `scripts/scan-assets.mjs` 의 목록에도 넣는다. 목록에 없으면 컴포지션이 그 자산을 소리 없이 건너뛴다(렌더는 성공한다). 렌더 뒤 구간별 음량(astats RMS)으로 확인한다.
