@@ -194,7 +194,7 @@ class SettingsView(
     private fun fmt(at: Long) = SimpleDateFormat("M월 d일 HH:mm", Locale.KOREA).format(Date(at))
 
     private companion object {
-        /** 임시 연락처. 제출 전 실제 주소로 바꾼다(README 개인정보 처리). */
-        const val CONTACT_EMAIL = "pleory.team@example.com"
+        /** 문의·신고 연락처(README 개인정보 처리와 같은 주소). */
+        const val CONTACT_EMAIL = "uclee95@gmail.com"
     }
 }

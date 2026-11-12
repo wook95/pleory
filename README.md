@@ -41,7 +41,7 @@ adb shell getprop sys.boot_completed   # 1 이면 부팅 완료
 
 ### 2. 빌드와 설치
 
-JDK 17 이상(Android Studio 번들 JBR 가능)이 필요하다. 키 설정은 아래 "테스트 환경 및 필요한 설정"을 본다.
+JDK 17 이상(Android Studio 번들 JBR 가능)이 필요하다. 설정 값은 아래 "테스트 환경 및 필요한 설정"을 본다. 설정 없이 빌드해도 앱은 동작하고, AI 정리만 빠진다(말한 원문 그대로 저장).
 
 ```bash
 ./gradlew assembleDebug
@@ -112,7 +112,7 @@ REC=1 tools/run-demo.sh v3 day2     # 같은 DB 로 다음 날 출근길 08:10 �
 
 저장소는 `https://nexus-playground.pleos.ai/repository/maven-releases/` 이다(로그인 불필요). 그 밖에 Anthropic Java SDK(Claude), zxing core(QR), Room + SQLCipher(로컬 DB)를 쓴다. Pleos LLM SDK 는 release 에 넣지 않는다(debug 스파이크 전용).
 
-### 키 설정 (`local.properties`)
+### 설정 값 (`local.properties`)
 
 루트의 `local.properties`(gitignore 대상)에 아래 이름으로 값을 넣는다. 값은 커밋하지 않는다.
 
@@ -123,7 +123,7 @@ REC=1 tools/run-demo.sh v3 day2     # 같은 DB 로 다음 날 출근길 08:10 �
 | `pleos.clientId` | Pleos Playground 앱 등록(debug 스파이크 화면 전용) | 본 기능에는 영향 없음 |
 | `pleos.clientSecret` | 같음 | 같음 |
 
-Claude·Gemini API 키는 앱에 넣지 않는다. 키는 Cloudflare Worker(`proxy/`)에만 두고 앱은 프록시를 부른다(배포 방법은 `proxy/README.md`). 프록시 설정이 없거나 두 LLM 이 모두 실패하면 한마디는 말한 원문 그대로(RAW) 저장되고, 카드에도 원문 한 줄로 나온다. 인식·응답·카드·요약·지난 기록·QR 은 프록시 없이도 동작한다.
+Claude·Gemini API 키는 앱에 넣지 않는다. 키는 Cloudflare Worker(`proxy/`)에만 두고 앱은 프록시를 부른다(구조와 배포 방법은 `proxy/README.md`). 제출 APK 에는 프록시 주소와 앱 토큰이 들어 있어 그대로 AI 정리가 동작한다. 저장소 소스로 직접 빌드하면 토큰이 없으니, 프록시를 직접 배포하거나 AI 정리 없이 쓴다. 프록시 설정이 없거나 두 LLM 이 모두 실패하면 한마디는 말한 원문 그대로(RAW) 저장되고, 카드에도 원문 한 줄로 나온다. 인식·응답·카드·요약·지난 기록·QR 은 프록시 없이도 동작한다.
 
 ### 권한
 
@@ -148,7 +148,7 @@ Vehicle SDK 가 `ai.pleos.playground.service.vehicle.VEHICLE_BINDING` 을 자동
   - `pleory-demo-v3.mp4`: 시연 영상 (1분 54초)
   - `PPLab_Pleory_release.apk`: 위와 같은 release APK
 
-설치는 `adb install -r apk/PPLab_Pleory_release.apk` 로 한다. 빌드 시점의 Claude 키(지출 한도 있음)가 APK 에 들어간다. Gemini 키는 넣지 않았다(Claude 가 실패하면 원문 그대로 남는다). `apk/` 의 다른 빌드 산출물은 git 에 넣지 않는다.
+설치는 `adb install -r apk/PPLab_Pleory_release.apk` 로 한다. AI 정리를 쓰려면 에뮬레이터가 인터넷에 연결되어 있어야 한다. APK 에는 API 키가 없고, LLM 은 프록시(`proxy/`)를 거쳐 부른다. 이미 debug 빌드가 깔려 있으면 서명이 달라 먼저 `adb uninstall com.pplab.pleory` 가 필요하다.
 
 ## 시연 영상
 
@@ -165,14 +165,14 @@ Vehicle SDK 가 `ai.pleos.playground.service.vehicle.VEHICLE_BINDING` 을 자동
 ## 개인정보 처리
 
 - 처음 실행하면(주차 상태에서) 동의 화면이 뜬다. "동의"를 눌러야만 동의다. "동의 안 함"을 고르거나 답하지 않으면 AI 정리는 꺼지고, 기록은 말한 원문 그대로 남는다.
-- 보내는 것: 말한 내용의 텍스트만 외부 LLM으로 보내 정리한다. 먼저 Anthropic(Claude `claude-haiku-5-5`)로 보내고, 실패하면 Google(Gemini `gemini-2.5-flash`)로 보낸다. 음성, 위치, 이름은 보내지 않는다.
+- 보내는 것: 말한 내용의 텍스트만 외부 LLM으로 보내 정리한다. 먼저 Anthropic(Claude `claude-haiku-5-5`)로 보내고, 실패하면 Google(Gemini `gemini-2.5-flash`)로 보낸다. 둘 다 API 키를 보관하는 중계 서버(Cloudflare Worker)를 거치며, 중계 서버는 본문을 저장하거나 로그로 남기지 않는다. 음성, 위치, 이름은 보내지 않는다.
 - 위치: 좌표는 날씨·주소 조회에 쓰고(지금은 fixture 라 밖으로 나가지 않는다), 경로와 거리는 차 안에서 계산한다.
 - Gleo AI: Gleo 에게 말해 남긴 메모는 Pleos 플랫폼(Gleo AI)이 처리한 뒤 앱으로 전달한다.
 - 앱이 모으는 것: 발화 텍스트, 발화 시각·위치·장소 이름·주행 거리·속도, 주행 경로, 정리된 항목(유형·감정·키워드), 동의 상태와 시각. 동의 화면에 같은 목록을 보여준다.
 - 저장: 기록은 이 차(Room, SQLCipher 암호화)에만 저장하고, 사용자가 지울 때까지 보관한다. DB 비밀번호는 Android Keystore 키로 감싸 둔다. 동의 상태와 시각은 같은 기기의 SharedPreferences에 둔다.
 - 철회와 삭제: 설정(카드 또는 주행 화면의 "설정", 주차 중에만 열림)에서 "동의 철회"를 누르면 그 순간부터 외부 전송이 멈춘다. "전체 삭제"는 확인을 한 번 더 거쳐 모든 기록을 지운다.
-- 문의·신고: 설정 화면의 "문의·신고"에 연락처를 보여준다. TODO(제출 전, 사람 작업): 지금은 임시 주소 `pleory.team@example.com` 이다. 실제 연락처로 바꾼다(`ui/S3Views.kt` `CONTACT_EMAIL`).
-- 개인정보처리방침: (URL 미정 — 담당자가 제공하면 여기에 넣는다)
+- 문의·신고: uclee95@gmail.com. 설정 화면의 "문의·신고"에도 같은 주소를 보여준다.
+- 개인정보처리방침: 이 섹션이 처리방침을 겸한다. 앱의 동의 화면에도 같은 내용을 보여준다.
 
 ## 데모 fixture
 
@@ -192,7 +192,7 @@ Vehicle SDK 가 `ai.pleos.playground.service.vehicle.VEHICLE_BINDING` 을 자동
 
 ## LLM
 
-구조화는 외부 LLM API를 쓴다. Claude(`claude-haiku-5-5`, 공식 Java SDK)가 1순위이고 6.5초 안에 실패하면 Gemini, 그래도 실패하면 말한 원문 그대로 남긴다(전체 12초 안, 운전자는 기다리지 않는다). 카드의 묶음별 대표 문장도 같은 순서로 만들고, 실패하면 규칙(묶음 첫 항목 + "외 N개")으로 보인다. 플랫폼 LLM(Gleo AI)이 서드파티에 열리면 전환한다.
+구조화는 외부 LLM API를 쓴다. 앱은 API 키 없이 중계 서버(`proxy/`, Cloudflare Worker)를 부르고, 중계 서버가 앱 토큰을 확인한 뒤 키를 붙여 넘긴다. 모델·출력 길이·호출 횟수도 중계 서버가 제한한다. Claude(`claude-haiku-5-5`, 공식 Java SDK)가 1순위이고 6.5초 안에 실패하면 Gemini, 그래도 실패하면 말한 원문 그대로 남긴다(전체 12초 안, 운전자는 기다리지 않는다). 카드의 묶음별 대표 문장도 같은 순서로 만들고, 실패하면 규칙(묶음 첫 항목 + "외 N개")으로 보인다. 플랫폼 LLM(Gleo AI)이 서드파티에 열리면 전환한다.
 
 ## 알려진 한계
 
@@ -203,5 +203,5 @@ Vehicle SDK 가 `ai.pleos.playground.service.vehicle.VEHICLE_BINDING` 을 자동
 
 ## 개발자 메모
 
-- APK에는 빌드 시점의 Claude·Gemini 키가 들어간다. 최종 제출 APK는 사용량 한도를 건 전용 키로 다시 빌드하고, 그 키는 심사 뒤 폐기한다.
+- API 키는 APK 나 저장소에 두지 않는다. 키를 바꿀 때는 Worker secret 만 바꾸면 되고 앱은 다시 빌드하지 않는다(`proxy/README.md`).
 - `local.properties`와 키스토어는 커밋하지 않는다.

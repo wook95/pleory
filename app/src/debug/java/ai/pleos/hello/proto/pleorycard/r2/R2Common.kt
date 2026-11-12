@@ -57,7 +57,7 @@ internal fun r2Settings(a: Activity, f: Frame, narrow: Boolean, confirming: Bool
         ),
         a.settingRow(
             f, "문의·신고",
-            listOf("AI가 정리한 내용이 이상하거나 앱에 문제가 있으면 알려 주세요." to t.sub, "pleory.team@example.com" to t.fg),
+            listOf("AI가 정리한 내용이 이상하거나 앱에 문제가 있으면 알려 주세요." to t.sub, "uclee95@gmail.com" to t.fg),
             null, narrow,
         ),
     )

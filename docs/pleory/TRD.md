@@ -251,7 +251,7 @@ FusedLocation 퍼미션명은 문서에서 확인해 추가한다. MainActivity�
 - **동의 화면(F12, §0-4).** 마이크(발화 텍스트 → Gemini)·위치(좌표 → 날씨·주소 조회, 지금은 fixture) 목적, Gleo 경로 메모를 Pleos 플랫폼이 처리한다는 고지, 앱 내 수집 목록, 암호화 저장을 넣고 고지 버전을 2로 올렸다(기존 동의자도 다시 묻는다). 동의 모델은 명세의 `Consent(mic, location, at)` 대신 **마이크·위치를 함께 묻는 명시적 동의 한 번**(상태+시각+버전)을 유지한다. 위치 좌표가 아직 밖으로 나가지 않아 둘을 나눌 실익이 없다. 날씨·주소 조회를 실제로 붙일 때 나눈다.
 - **Gleo `SHOW_TODAY_CARD`(§11).** schema 세 번째 액션(component=activity, 파라미터 없음). 실측(Gleo 4.2.0.15): activity 액션은 `startActivity`(action `ai.pleos.hello.SHOW_TODAY_CARD`, FLAG_ACTIVITY_NEW_TASK)로 온다. MainActivity(singleTop)가 패키지 접두·맨 이름 action을 받고, 화면 게이트가 열려(주차) 있으면 카드를 연다 — 도착 카드 상태거나 지금 세션에 한마디가 있으면 지금 세션, 빈 세션이면 마지막으로 끝난 세션. 주행 중이면 화면을 바꾸지 않고 `fail` "The card is available only while parked." Gleo가 각각 "오늘 카드를 화면에 보여드릴게요" / "주차 중일 때만 … 보여줄 수 있어요"로 답하는 것을 확인했다.
 - **Gleo 회신을 `setPackage("ai.umos.ambientai")`로 한정.** `APP_ACTION_RESPONSE`는 Gleo가 user 10에서 동적으로 등록한 receiver가 받는다(`dumpsys activity broadcasts`). ADD_DRIVE_NOTE·SHOW_TODAY_CARD 모두 한정 후에도 Gleo가 응답을 받는 것을 확인했다.
-- **문의·신고(F9·F12, 심사 가이드).** 설정에 연락처를 보여준다. 주소는 임시값 `pleory.team@example.com` — 제출 전 교체(README에 사람 작업으로 표시).
+- **문의·신고(F9·F12, 심사 가이드).** 설정에 연락처를 보여준다. 주소는 `uclee95@gmail.com`(2026-11-13, 임시값 `pleory.team@example.com` 에서 교체).
 - **요약 오디오 포커스(§1 예외).** 요약 중 LOSS_TRANSIENT면 멈추고 포커스 요청을 쥔 채 기다렸다가 GAIN에서 처음부터 다시 읽는다(SDK에 이어 읽기 없음). 재개 때 15초 상한도 다시 잰다. 손실이 15초를 넘으면 요약을 끝낸다. "적어뒀어"는 기존대로 일시 손실이면 생략. 실측: Gleo 호출로 `focus paused -2` → 약 5~14초 뒤 `regained, resume` → onDone. 이때 SDK가 `stop()`마다 onStop을 내는 것도 확인했다(§8-5 첫 항목의 가정과 맞다).
 - **TrackPoint 적재 간격(§3·§12).** 위치 콜백 주기는 SDK가 정하므로(문서 미기재) 앱이 거른다: 화면이 보이면 5초, 백그라운드면 30초(`TrackSampler`). 데모 GPX는 30초 간격이라 카드 값(51분·23km)은 그대로다.
 
