@@ -1,0 +1,16 @@
+name = "pleory-llm-proxy"
+main = "src/index.js"
+compatibility_date = "2025-09-24"
+
+# IP 당 분당 30회. 앱은 한마디에 구조화 1회 + 대표 문장 1회 정도라 충분하다
+[[ratelimits]]
+name = "RL"
+namespace_id = "1001"
+  [ratelimits.simple]
+  limit = 30
+  period = 60
+
+# 한국 이용자 요청이 홍콩(HKG) 데이터센터에서 실행되면 Gemini 가 "User location is not supported" 로 막는다.
+# 실행 위치를 서울 리전 근처로 고정한다
+[placement]
+region = "aws:ap-northeast-2"

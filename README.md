@@ -118,12 +118,12 @@ REC=1 tools/run-demo.sh v3 day2     # 같은 DB 로 다음 날 출근길 08:10 �
 
 | 키 | 용도 | 없을 때 |
 |---|---|---|
-| `llm.claudeKey` | 1순위 구조화 LLM(Claude `claude-haiku-5-5`) | 셸 `PLEORY_CLAUDE_KEY` 를 읽고, 그것도 없으면 Claude 를 건너뛴다 |
-| `llm.geminiKey` | 2순위 구조화 LLM(Gemini `gemini-2.5-flash`) | 셸 `GEMINI_API_KEY` 를 읽고, 그것도 없으면 Gemini 를 건너뛴다 |
+| `llm.proxyUrl` | 구조화 LLM 프록시 주소(`proxy/`, Claude `claude-haiku-5-5` → Gemini `gemini-2.5-flash`) | LLM 을 건너뛴다 |
+| `llm.proxyToken` | 프록시 앱 토큰(Worker 의 `APP_TOKEN` 과 같은 값) | 같음 |
 | `pleos.clientId` | Pleos Playground 앱 등록(debug 스파이크 화면 전용) | 본 기능에는 영향 없음 |
 | `pleos.clientSecret` | 같음 | 같음 |
 
-LLM 키가 하나도 없거나 둘 다 실패하면 한마디는 말한 원문 그대로(RAW) 저장되고, 카드에도 원문 한 줄로 나온다. 인식·응답·카드·요약·지난 기록·QR 은 키 없이도 동작한다. `ANTHROPIC_API_KEY` 는 읽지 않는다. 셸 환경 변수를 쓰려면 그 변수가 있는 셸에서 빌드한다(떠 있는 Gradle 데몬은 `./gradlew --stop` 으로 내린다).
+Claude·Gemini API 키는 앱에 넣지 않는다. 키는 Cloudflare Worker(`proxy/`)에만 두고 앱은 프록시를 부른다(배포 방법은 `proxy/README.md`). 프록시 설정이 없거나 두 LLM 이 모두 실패하면 한마디는 말한 원문 그대로(RAW) 저장되고, 카드에도 원문 한 줄로 나온다. 인식·응답·카드·요약·지난 기록·QR 은 프록시 없이도 동작한다.
 
 ### 권한
 

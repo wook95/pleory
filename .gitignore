@@ -18,3 +18,8 @@ video/public/vo/
 video/public/sfx/
 video/public/bgm.mp3
 video/src/assets.json
+
+# LLM 프록시 로컬 시험용 비밀값·캐시
+proxy/.dev.vars
+proxy/.wrangler/
+proxy/node_modules/

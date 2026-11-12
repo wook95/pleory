@@ -23,11 +23,10 @@ android {
         versionCode = 1
         versionName = "1.0"
 
-        // 임시 LLM(Pleos LLM 400 해결 전까지). local.properties llm.geminiKey 가 없으면 셸의 GEMINI_API_KEY
-        buildConfigField("String", "GEMINI_API_KEY", localProp("llm.geminiKey", "GEMINI_API_KEY"))
-        // 1순위 구조화 LLM(Claude). local.properties llm.claudeKey 가 없으면 셸의 PLEORY_CLAUDE_KEY.
-        // ANTHROPIC_API_KEY 는 읽지 않는다(셸에 있으면 사용자의 Claude Code 과금 키가 앱에 들어간다). 비어 있으면 Claude 를 건너뛴다
-        buildConfigField("String", "CLAUDE_API_KEY", localProp("llm.claudeKey", "PLEORY_CLAUDE_KEY"))
+        // 임시 LLM(Pleos LLM 400 해결 전까지). Claude·Gemini 는 proxy/ 의 Worker 를 거친다.
+        // 진짜 API 키는 Worker 에만 있고 APK 에는 프록시 주소와 앱 토큰만 들어간다. 비어 있으면 LLM 을 건너뛰고 RAW 로 떨어진다
+        buildConfigField("String", "LLM_PROXY_URL", localProp("llm.proxyUrl"))
+        buildConfigField("String", "LLM_PROXY_TOKEN", localProp("llm.proxyToken"))
     }
 
     // local.properties 에 release.* 가 모두 있으면 그 키스토어로, 없으면 debug 서명(심사용)으로 서명한다. 키스토어·비밀번호는 커밋하지 않는다

@@ -33,7 +33,8 @@ import java.net.UnknownHostException
  * - Error 메시지는 로그용 사유 분류만 담는다("gemini http 429" 등). 요청·응답 본문, 발화, 키는 넣지 않는다.
  */
 class GeminiStructurer(
-    private val apiKey: String = BuildConfig.GEMINI_API_KEY,
+    private val proxyUrl: String = BuildConfig.LLM_PROXY_URL,
+    private val proxyToken: String = BuildConfig.LLM_PROXY_TOKEN,
     private val budgetMs: Int = 8_000,
 ) : Structurer, Digester {
 
@@ -43,6 +44,7 @@ class GeminiStructurer(
     override suspend fun digest(input: String): StructurerResult = request(CardDigest.SYSTEM_PROMPT, DIGEST_SCHEMA, input)
 
     private suspend fun request(system: String, schema: String, text: String): StructurerResult = withContext(Dispatchers.IO) {
+        if (proxyUrl.isBlank() || proxyToken.isBlank()) return@withContext StructurerResult.Error("gemini unavailable")
         val deadline = System.currentTimeMillis() + budgetMs
         var attempt = 0
         while (true) {
@@ -74,13 +76,14 @@ class GeminiStructurer(
     @OptIn(InternalCoroutinesApi::class)
     private suspend fun callOnce(system: String, schema: String, text: String, timeoutMs: Int): Attempt {
         if (timeoutMs <= 0) return Attempt.Fail("gemini timeout")
-        val conn = (URL("$ENDPOINT/$MODEL:generateContent").openConnection() as HttpURLConnection).apply {
+        // 프록시(proxy/)가 앱 토큰을 진짜 키로 바꿔 Google 에 넘긴다
+        val conn = (URL("$proxyUrl$PATH/$MODEL:generateContent").openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"
             connectTimeout = timeoutMs
             readTimeout = timeoutMs
             doOutput = true
             setRequestProperty("Content-Type", "application/json")
-            setRequestProperty("x-goog-api-key", apiKey)
+            setRequestProperty("x-goog-api-key", proxyToken)
         }
         val handle = currentCoroutineContext().job.invokeOnCompletion(onCancelling = true) { conn.disconnect() }
         return try {
@@ -126,7 +129,7 @@ class GeminiStructurer(
         .toString()
 
     private companion object {
-        const val ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models"
+        const val PATH = "/v1beta/models"
         const val MODEL = "gemini-2.5-flash" // flash-lite 는 빈말에 없는 문장을 지어냈다(규칙 4 위반)
         const val RETRY_DELAY_MS = 300L
         const val MIN_RETRY_MS = 1_500L

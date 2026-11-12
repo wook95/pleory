@@ -35,23 +35,26 @@ import kotlinx.coroutines.withContext
  * Claude 구조화(PRD §4-1, TRD D6 1순위). 공식 Java SDK 로 Messages API 를 부르고, 보내는 것은 발화 텍스트뿐이다.
  * 구조화 출력(output_config.format JSON 스키마)으로 받고, 결과는 호출 쪽이 [StructureContract.parse] 로 다시 검증한다.
  *
- * - 키가 비어 있으면 [available] 이 false — 체인이 건너뛴다.
+ * - 프록시 주소·토큰이 비어 있으면 [available] 이 false — 체인이 건너뛴다.
  * - 재시도하지 않는다(maxRetries 0). 실패하면 체인이 Gemini 로 넘어간다.
  * - 코루틴이 취소되면 진행 중인 요청 future 도 취소된다. 늦은 응답은 버려진다.
  * - 클라이언트는 하나만 만든다. 첫 한마디가 클라이언트 생성·첫 TLS 연결에 4.5초를 다 쓰지 않게 [warmUp] 으로 미리 데운다.
  * - Error 메시지는 로그용 분류만 담는다("claude http 429", "claude refusal" 등). 본문·발화·키는 넣지 않는다.
  */
 class ClaudeStructurer(
-    private val apiKey: String = BuildConfig.CLAUDE_API_KEY,
+    private val proxyUrl: String = BuildConfig.LLM_PROXY_URL,
+    private val proxyToken: String = BuildConfig.LLM_PROXY_TOKEN,
     private val timeoutMs: Long = 4_500,
 ) : Structurer, Digester {
 
-    val available: Boolean get() = apiKey.isNotBlank()
+    val available: Boolean get() = proxyUrl.isNotBlank() && proxyToken.isNotBlank()
 
     /** 한 번만 만든다. 데우는 중에 구조화가 오면 같은 초기화를 기다린다(lazy 동기화). */
     private val client: AnthropicClient by lazy {
+        // 프록시(proxy/)가 앱 토큰을 진짜 키로 바꿔 Anthropic 에 넘긴다. 경로(/v1/messages 등)는 그대로다
         AnthropicOkHttpClient.builder()
-            .apiKey(apiKey)
+            .baseUrl(proxyUrl)
+            .apiKey(proxyToken)
             .maxRetries(0)
             .timeout(Duration.ofMillis(timeoutMs))
             .build()

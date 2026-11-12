@@ -283,11 +283,12 @@ FusedLocation 퍼미션명은 문서에서 확인해 추가한다. MainActivity�
 - 이유: Gemini 무료 키가 계속 HTTP 429(할당량 소진)를 내서 데모 발화가 RAW로 남았다.
 - 체인(`core/FallbackStructurer`): Claude `claude-haiku-5-5` 4.5초 → 실패하면(HTTP 오류·타임아웃·`stop_reason` refusal/max_tokens·형식·계약 위반) Gemini(남은 약 3.4초) → RAW. 전체 상한은 그대로 컨트롤러 8초이고, 취소되면 진행 중인 단계도 취소돼 늦은 응답이 두 번 저장되지 않는다. 동의 게이트(`ConsentGatedStructurer`)는 체인 전체를 감싼다. Gleo `ADD_DRIVE_NOTES` 경로는 LLM을 쓰지 않는다(그대로).
 - 구현: 공식 Java SDK `com.anthropic:anthropic-java:3.3.0`(Android minSdk 28에서 그대로 동작, raw HTTP 불필요). 시스템 프롬프트는 Gemini와 같은 PRD §4-1 문구(`StructureContract.SYSTEM_PROMPT`), 사용자 메시지는 발화 텍스트뿐. `output_config.format` JSON 스키마({items:[{text,type,emotion,keywords}]}, additionalProperties false), `effort: low`, 생각 끔(Haiku 5.5는 effort high 이하에서 허용), `max_tokens` 1024, temperature 없음, SDK 재시도 0. 받은 JSON도 `StructureContract.parse`로 다시 검증한다. Haiku 5.5는 서버 쪽 거절 대체가 없어서 Gemini가 대체다.
-- 키: `local.properties` `llm.claudeKey` 또는 셸 `PLEORY_CLAUDE_KEY` → `BuildConfig.CLAUDE_API_KEY`. `ANTHROPIC_API_KEY`는 읽지 않는다(셸에 있으면 사용자의 Claude Code 과금 키가 APK에 들어간다). 비어 있으면 Claude 단계를 건너뛰고 Gemini가 8초를 다 쓴다.
+- 키: 처음에는 `local.properties` `llm.claudeKey` → `BuildConfig.CLAUDE_API_KEY` 였다. 2026-11-12 부터 프록시로 바꿨다(아래 '키 보관').
 - 고지: 발화 텍스트 수신처가 Anthropic(1순위)·Google(대체)로 바뀌어 동의 문구를 고치고 고지 버전을 3으로 올렸다(기존 동의자도 다시 묻는다).
 - 로그(`PleoryFlow`): `llm ok: claude`, `llm claude failed: claude http 429`처럼 단계와 분류만 남긴다. 본문·발화·키는 남기지 않는다.
 - 실측(에뮬레이터, 2026-11-08): Gleo 메모 첫 호출 3.1초(클라이언트 생성 포함), 이후 데모 발화 1.2~1.7초, 모두 `llm ok: claude`. 데모 카드: 한마디 2개 → 항목 3개(감정↓, 할 일, 감정↑), 요약 "힘들게 시작해서 노을로 끝났어. 할 일 하나 있어."
 - 미리 데우기(2026-11-08): 새 프로세스 첫 한마디가 클라이언트 생성·첫 TLS 연결로 Claude 4.5초를 다 써 RAW로 남는 일이 있었다. 앱 시작(동의가 있을 때)과 동의 직후에 IO 스레드에서 클라이언트를 한 번 만들고 `models.retrieve("claude-haiku-5-5")`(과금 없음, 발화 없음)로 연결을 연다. 한 번만 돌고, 데우는 중에 구조화가 오면 같은 클라이언트 초기화를 기다린다. 로그 `claude warm ok <ms>` / `claude warm failed <분류>`. 실측: force-stop 뒤 콜드 스타트 2회 모두 warm 약 1.1초, 데모 두 한마디 모두 `llm ok: claude`(첫 한마디 2.0~2.5초, 둘째 1.0~1.3초).
+- 키 보관(2026-11-12): APK 에 키를 넣던 방식을 버리고 Cloudflare Worker 프록시(`proxy/`)를 거친다. APK 를 풀면 BuildConfig 의 키가 그대로 나와서다(공개 저장소·심사 제출 대비). 앱은 프록시 주소와 앱 토큰(`llm.proxyUrl`/`llm.proxyToken` → `BuildConfig.LLM_PROXY_URL/TOKEN`)만 갖고, Claude SDK 는 `baseUrl` 만 바꿔 같은 경로(`/v1/messages`, `/v1/models/{id}`)를, Gemini 는 같은 `generateContent` 경로를 프록시로 보낸다. Worker 는 앱 토큰 확인 → IP 당 분당 30회 → 모델 고정(haiku-5-5·gemini-2.5-flash)·스트리밍·도구 금지·출력 2048 토큰 상한을 걸고 진짜 키로 바꿔 넘긴다. 본문은 로그로 남기지 않는다. 앱 토큰이 새도 이 범위 안에서만 쓸 수 있고, 키 교체는 Worker secret 만 바꾸면 된다(앱 재빌드 불필요).
 
 ### 8-9. v2 범위: 지난 기록, 도착 리마인드, QR (2026-11-08)
 
